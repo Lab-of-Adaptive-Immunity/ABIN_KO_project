@@ -201,7 +201,7 @@ print(pca1)
 ```
 
 ```{r}
-tiff('exp2_PCA1_PCA2.tiff', units = 'in', width = 7.5, height = 5.5, res = 150)
+tiff('exp2_PCA1_PCA2_all.tiff', units = 'in', width = 7.5, height = 5.5, res = 150)
 print(pca1)
 dev.off()
 ```
@@ -222,7 +222,7 @@ print(pca2)
 ```
 
 ```{r}
-tiff('exp2_PCA2_PCA3.tiff', units = 'in', width = 7.5, height = 5.5, res = 150)
+tiff('exp2_PCA2_PCA3_all.tiff', units = 'in', width = 7.5, height = 5.5, res = 150)
 print(pca2)
 dev.off()
 ```
@@ -244,7 +244,7 @@ print(pca1_blank)
 ```
 
 ```{r}
-tiff('exp2_PCA1_PCA2_blank.tiff', units = 'in', width = 6.1, height = 5.1, res = 150)
+tiff('exp2_PCA1_PCA2_all_blank.tiff', units = 'in', width = 6.1, height = 5.1, res = 150)
 print(pca1_blank)
 dev.off()
 ```
@@ -267,7 +267,7 @@ print(pca2_blank)
 ```
 
 ```{r}
-tiff('exp2_PCA2_PCA3_blank.tiff', units = 'in', width = 6.1, height = 5.1, res = 150)
+tiff('exp2_PCA2_PCA3_all_blank.tiff', units = 'in', width = 6.1, height = 5.1, res = 150)
 print(pca2_blank)
 dev.off()
 ```
@@ -391,51 +391,9 @@ dev.off()
 We also extract results where we compare Activated and inhibited cells.
 
 ```{r}
-res_exp2_inh <- lfcShrink(dds = dds_exp2, contrast = c('Activation', 'Act', 'Act_and_p38i'), type = 'ashr')
+res_exp2_act_vs_inh <- lfcShrink(dds = dds_exp2, contrast = c('Activation', 'Act', 'Act_and_p38i'), type = 'ashr')
 ```
 
-```{r}
-tmp.tab <- res_exp2_inh %>% as.data.frame %>% 
-  dplyr::filter(!is.na(padj) & !is.na(log2FoldChange)) %>%
-  dplyr::mutate(log = -log10(padj), 
-                log = ifelse(log == Inf, max(log[log != Inf])*1.02, log),
-                legend = case_when(abs(log2FoldChange) <= log2(1.5) & padj >= .05 ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
-                                   abs(log2FoldChange) <= log2(1.5) & padj < .05 ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
-                                   abs(log2FoldChange) > log2(1.5) & padj >= .05  ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
-                                   log2FoldChange > log2(1.5) & padj < .05 ~ 'p-adj < 0.05 and L2FC > log2(1.5)',
-                                   log2FoldChange < log2(1.5) & padj < .05 ~ 'p-adj < 0.05 and L2FC < -log2(1.5)'))
-  
-xlim.a <- max(abs(min(tmp.tab$log2FoldChange) - 0.1), 
-              abs(max(tmp.tab$log2FoldChange) + 0.1))
-ylim.a <- max(tmp.tab$log) * 1.08 
-diff.x.sig <- xlim.a - 1
-colPal <- c(col_WT, col_GTKO, 'gray50')
-names(colPal) <- c('p-adj < 0.05 and L2FC < -log2(1.5)', 'p-adj < 0.05 and L2FC > log2(1.5)', 'p-adj >= 0.05 or |L2FC| <= log2(1.5)')
-tmp.tab$symbols <- ifelse(rownames(tmp.tab) %in% c('Gzmb', 'Ifng', 'Casp1', 'Tnip1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4'), rownames(tmp.tab), '')
-tmp.tab$symbols[tmp.tab$symbols == 'Tnip1'] <- 'Abin1'
-volplot2 <- ggplot(tmp.tab, aes(log2FoldChange, log, label= symbols)) + 
-        geom_point(aes(colour=legend)) + xlab('Log2 Fold Change') + ylab('-log10(p.adj)') +
-        geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Abin1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4') ), pch = 21, size = 4, colour = 'red') +
-        scale_color_manual(values=colPal) +
-        annotate("rect", xmin = -Inf, xmax = -log2(1.5), ymin = ylim.a/1.06, ymax = Inf, fill = col_WT) +
-        annotate("rect", xmin = log2(1.5), xmax =Inf, ymin = ylim.a/1.06, ymax = Inf, fill = col_GTKO) +
-        annotate("text", x = -log2(1.5) - diff.x.sig/20, y = ylim.a, hjust = 1, label = "Upregulated in Act", 
-                 col = 'white', fontface = 2, size = 3) + 
-        annotate("text", x = log2(1.5) + diff.x.sig/20, y = ylim.a, hjust = 0, label = "Upregulated in Act+p38i", 
-                 col = 'white', fontface = 2, size = 3) +
-        geom_vline(xintercept = -log2(1.5), linetype="dashed", color = col_WT, size = 0.5) +
-        geom_vline(xintercept = log2(1.5), linetype="dashed", color = col_GTKO, size = 0.5) +
-        geom_hline(yintercept = -log10(0.05), linetype="dashed", color = "black", size = 0.5) +
-        xlim(-xlim.a, xlim.a) + ylim(0, ylim.a) + geom_text_repel(ylim = c(0, ylim.a/1.1), seed = 120, max.overlaps = 100) + 
-        ggtitle("Volcano plot of comparison between Act and Act+p38i mice") + 
-        theme_classic() + 
-        theme(
-          axis.line.x = element_line(colour = "grey50"),
-          axis.line.y = element_line(colour = "grey50"),
-          plot.title = element_text(face="bold"))
-
-print(volplot2)
-```
 
 # Expression using only activated cells
 
@@ -453,6 +411,8 @@ Run DESeq itself.
 ```{r}
 dds_exp2_act <- DESeq(dds_exp2_act)
 ```
+
+Extract Regularized log-normalized data.
 
 ```{r}
 rlog_exp2_act <- rlog(dds_exp2_act, blind = FALSE)
@@ -483,13 +443,257 @@ pca1 <- ggplot(pca_data, aes(x = PC1, y = PC2, color = Knockout)) +
 print(pca1)
 ```
 
-# Getting results for activated data
+# Getting results for activated data only
 
 We now get Differentially expressed genes for cells from activated mice only.
 
 ```{r}
 res_exp2_act <- lfcShrink(dds = dds_exp2_act, contrast = c('Knockout', 'GTKO', 'WT'), type = 'ashr')
 ```
+We now plot volcano plot for activated data only.
+
+```{r}
+tmp.tab <- res_exp2_act %>% as.data.frame %>% 
+  dplyr::filter(!is.na(padj) & !is.na(log2FoldChange)) %>%
+  dplyr::mutate(log = -log10(padj), 
+                log = ifelse(log == Inf, max(log[log != Inf])*1.02, log),
+                legend = case_when(abs(log2FoldChange) <= log2(1.5) & padj >= .05 ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
+                                   abs(log2FoldChange) <= log2(1.5) & padj < .05 ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
+                                   abs(log2FoldChange) > log2(1.5) & padj >= .05  ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
+                                   log2FoldChange > log2(1.5) & padj < .05 ~ 'p-adj < 0.05 and L2FC > log2(1.5)',
+                                   log2FoldChange < log2(1.5) & padj < .05 ~ 'p-adj < 0.05 and L2FC < -log2(1.5)'))
+  
+xlim.a <- max(abs(min(tmp.tab$log2FoldChange) - 0.1), 
+              abs(max(tmp.tab$log2FoldChange) + 0.1))
+ylim.a <- max(tmp.tab$log) * 1.08 
+diff.x.sig <- xlim.a - 1
+colPal <- c(col_WT, col_GTKO, 'gray50')
+names(colPal) <- c('p-adj < 0.05 and L2FC < -log2(1.5)', 'p-adj < 0.05 and L2FC > log2(1.5)', 'p-adj >= 0.05 or |L2FC| <= log2(1.5)')
+tmp.tab$symbols <- ifelse(rownames(tmp.tab) %in% c('Gzmb', 'Ifng', 'Casp1', 'Tnip1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4'), rownames(tmp.tab), '')
+tmp.tab$symbols[tmp.tab$symbols == 'Tnip1'] <- 'Abin1'
+volplot1_act <- ggplot(tmp.tab, aes(log2FoldChange, log, label= symbols)) + 
+        geom_point(aes(colour=legend)) + xlab('Log2 Fold Change') + ylab('-log10(p.adj)') +
+        geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Abin1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4') & legend %in% c('p-adj < 0.05 and L2FC > log2(1.5)', 'p-adj < 0.05 and L2FC < -log2(1.5)')), pch = 21, size = 4, colour = 'red') +
+        scale_color_manual(values=colPal) +
+        annotate("rect", xmin = -Inf, xmax = -log2(1.5), ymin = ylim.a/1.06, ymax = Inf, fill = col_WT) +
+        annotate("rect", xmin = log2(1.5), xmax =Inf, ymin = ylim.a/1.06, ymax = Inf, fill = col_GTKO) +
+        annotate("text", x = -log2(1.5) - diff.x.sig/20, y = ylim.a, hjust = 1, label = "Upregulated in WT", 
+                 col = 'white', fontface = 2, size = 3) + 
+        annotate("text", x = log2(1.5) + diff.x.sig/20, y = ylim.a, hjust = 0, label = "Upregulated in GTKO", 
+                 col = 'white', fontface = 2, size = 3) +
+        geom_vline(xintercept = -log2(1.5), linetype="dashed", color = col_WT, size = 0.5) +
+        geom_vline(xintercept = log2(1.5), linetype="dashed", color = col_GTKO, size = 0.5) +
+        geom_hline(yintercept = -log10(0.05), linetype="dashed", color = "black", size = 0.5) +
+        xlim(-xlim.a, xlim.a) + ylim(0, ylim.a) + geom_text_repel(ylim = c(0, ylim.a/1.1), seed = 120, max.overlaps = 10000) + 
+        ggtitle("Volcano plot of comparison between GTKO and WT mice \n (activated only)") + 
+        theme_classic() + 
+        theme(
+          axis.line.x = element_line(colour = "grey50"),
+          axis.line.y = element_line(colour = "grey50"),
+          plot.title = element_text(face="bold"))
+
+print(volplot1_act)
+```
+
+Write as tiff.
+
+```{r}
+tiff('exp2_Volcano_plot_WT_vs_GTKO_act.tiff', units = 'in', width = 6.5, height = 6.5, res = 150)
+print(volplot1_act)
+dev.off()
+```
+
+We make blank version.
+
+```{r}
+tmp.tab <- res_exp2_act %>% as.data.frame %>% 
+  dplyr::filter(!is.na(padj) & !is.na(log2FoldChange)) %>%
+  dplyr::mutate(log = -log10(padj), 
+                log = ifelse(log == Inf, max(log[log != Inf])*1.02, log),
+                legend = case_when(abs(log2FoldChange) <= log2(1.5) & padj >= .05 ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
+                                   abs(log2FoldChange) <= log2(1.5) & padj < .05 ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
+                                   abs(log2FoldChange) > log2(1.5) & padj >= .05  ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
+                                   log2FoldChange > log2(1.5) & padj < .05 ~ 'p-adj < 0.05 and L2FC > log2(1.5)',
+                                   log2FoldChange < log2(1.5) & padj < .05 ~ 'p-adj < 0.05 and L2FC < -log2(1.5)'))
+  
+xlim.a <- max(abs(min(tmp.tab$log2FoldChange) - 0.1), 
+              abs(max(tmp.tab$log2FoldChange) + 0.1))
+ylim.a <- max(tmp.tab$log) * 1.08 
+diff.x.sig <- xlim.a - 1
+colPal <- c(col_WT, col_GTKO, 'gray50')
+names(colPal) <- c('p-adj < 0.05 and L2FC < -log2(1.5)', 'p-adj < 0.05 and L2FC > log2(1.5)', 'p-adj >= 0.05 or |L2FC| <= log2(1.5)')
+tmp.tab$symbols <- ifelse(rownames(tmp.tab) %in% c('Gzmb', 'Ifng', 'Casp1', 'Tnip1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4'), rownames(tmp.tab), '')
+tmp.tab$symbols[tmp.tab$symbols == 'Tnip1'] <- 'Abin1'
+volplot1_act_blank <- ggplot(tmp.tab, aes(log2FoldChange, log)) + 
+        geom_point(aes(colour=legend), size = 2) + 
+        xlab('') +
+        ylab('') +
+        geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Abin1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4') & legend %in% c('p-adj < 0.05 and L2FC > log2(1.5)', 'p-adj < 0.05 and L2FC < -log2(1.5)')), pch = 21, size = 5, colour = 'red') +
+        scale_color_manual(values=colPal) +
+        annotate("rect", xmin = -Inf, xmax = -log2(1.5), ymin = ylim.a/1.06, ymax = Inf, fill = col_WT) +
+        annotate("rect", xmin = log2(1.5), xmax =Inf, ymin = ylim.a/1.06, ymax = Inf, fill = col_GTKO) +
+        geom_vline(xintercept = -log2(1.5), linetype="dashed", color = col_WT, size = 0.5) +
+        geom_vline(xintercept = log2(1.5), linetype="dashed", color = col_GTKO, size = 0.5) +
+        geom_hline(yintercept = -log10(0.05), linetype="dashed", color = "black", size = 0.5) +
+        xlim(-xlim.a, xlim.a) + ylim(0, ylim.a) + 
+        theme_classic() +
+        ggtitle('') +
+        theme(
+          axis.line.x = element_line(colour = "grey50"),
+          axis.line.y = element_line(colour = "grey50"),
+          axis.text.x=element_blank(),
+          axis.text.y=element_blank(),
+          plot.title = element_text(face="bold"),
+          legend.position='none'
+          )
+
+print(volplot1_act_blank)
+```
+
+Write as tiff.
+
+```{r}
+tiff('exp2_Volcano_plot_WT_vs_GTKO_act_blank.tiff', units = 'in', width = 4.5, height = 6.5, res = 150)
+print(volplot1_act_blank)
+dev.off()
+```
+
+# Getting results for inhibited data only
+
+Now we create object using only activated samples.
+
+```{r}
+dds_exp2_inh <- DESeqDataSet(expcounts[,expcounts$Activation != 'Act'], design = ~ Experiment + Knockout)
+rowData(dds_exp2_inh)$EnsemblID <- rownames(expcounts)
+dds_exp2_inh <- dds_exp2_inh[rowSums(counts(dds_exp2_inh)) > 10, ] # remove <= 10 counts = noise
+dds_exp2_inh <- reannotate(dds_exp2_inh)
+```
+
+Run DESeq itself.
+
+```{r}
+dds_exp2_inh <- DESeq(dds_exp2_inh)
+```
+
+Extract Regularized log-normalized data.
+
+```{r}
+rlog_exp2_inh <- rlog(dds_exp2_inh, blind = FALSE)
+```
+
+We now get Differentially expressed genes for cells for non-activated mice only.
+
+```{r}
+res_exp2_inh <- lfcShrink(dds = dds_exp2_inh, contrast = c('Knockout', 'GTKO', 'WT'), type = 'ashr')
+```
+We now plot volcano plot for activated data only.
+
+```{r}
+tmp.tab <- res_exp2_inh %>% as.data.frame %>% 
+  dplyr::filter(!is.na(padj) & !is.na(log2FoldChange)) %>%
+  dplyr::mutate(log = -log10(padj), 
+                log = ifelse(log == Inf, max(log[log != Inf])*1.02, log),
+                legend = case_when(abs(log2FoldChange) <= log2(1.5) & padj >= .05 ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
+                                   abs(log2FoldChange) <= log2(1.5) & padj < .05 ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
+                                   abs(log2FoldChange) > log2(1.5) & padj >= .05  ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
+                                   log2FoldChange > log2(1.5) & padj < .05 ~ 'p-adj < 0.05 and L2FC > log2(1.5)',
+                                   log2FoldChange < log2(1.5) & padj < .05 ~ 'p-adj < 0.05 and L2FC < -log2(1.5)'))
+  
+xlim.a <- max(abs(min(tmp.tab$log2FoldChange) - 0.1), 
+              abs(max(tmp.tab$log2FoldChange) + 0.1))
+ylim.a <- max(tmp.tab$log) * 1.08 
+diff.x.sig <- xlim.a - 1
+colPal <- c(col_WT, col_GTKO, 'gray50')
+names(colPal) <- c('p-adj < 0.05 and L2FC < -log2(1.5)', 'p-adj < 0.05 and L2FC > log2(1.5)', 'p-adj >= 0.05 or |L2FC| <= log2(1.5)')
+tmp.tab$symbols <- ifelse(rownames(tmp.tab) %in% c('Gzmb', 'Ifng', 'Casp1', 'Tnip1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4'), rownames(tmp.tab), '')
+tmp.tab$symbols[tmp.tab$symbols == 'Tnip1'] <- 'Abin1'
+volplot1_inh <- ggplot(tmp.tab, aes(log2FoldChange, log, label= symbols)) + 
+        geom_point(aes(colour=legend)) + xlab('Log2 Fold Change') + ylab('-log10(p.adj)') +
+        geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Abin1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4') & legend %in% c('p-adj < 0.05 and L2FC > log2(1.5)', 'p-adj < 0.05 and L2FC < -log2(1.5)')), pch = 21, size = 4, colour = 'red') +
+        scale_color_manual(values=colPal) +
+        annotate("rect", xmin = -Inf, xmax = -log2(1.5), ymin = ylim.a/1.06, ymax = Inf, fill = col_WT) +
+        annotate("rect", xmin = log2(1.5), xmax =Inf, ymin = ylim.a/1.06, ymax = Inf, fill = col_GTKO) +
+        annotate("text", x = -log2(1.5) - diff.x.sig/20, y = ylim.a, hjust = 1, label = "Upregulated in WT", 
+                 col = 'white', fontface = 2, size = 3) + 
+        annotate("text", x = log2(1.5) + diff.x.sig/20, y = ylim.a, hjust = 0, label = "Upregulated in GTKO", 
+                 col = 'white', fontface = 2, size = 3) +
+        geom_vline(xintercept = -log2(1.5), linetype="dashed", color = col_WT, size = 0.5) +
+        geom_vline(xintercept = log2(1.5), linetype="dashed", color = col_GTKO, size = 0.5) +
+        geom_hline(yintercept = -log10(0.05), linetype="dashed", color = "black", size = 0.5) +
+        xlim(-xlim.a, xlim.a) + ylim(0, ylim.a) + geom_text_repel(ylim = c(0, ylim.a/1.1), seed = 120, max.overlaps = 10000) + 
+        ggtitle("Volcano plot of comparison between GTKO and WT mice \n (inhibited only)") + 
+        theme_classic() + 
+        theme(
+          axis.line.x = element_line(colour = "grey50"),
+          axis.line.y = element_line(colour = "grey50"),
+          plot.title = element_text(face="bold"))
+
+print(volplot1_inh)
+```
+
+Write as tiff.
+
+```{r}
+tiff('exp2_Volcano_plot_WT_vs_GTKO_inh.tiff', units = 'in', width = 6.5, height = 6.5, res = 150)
+print(volplot1_inh)
+dev.off()
+```
+
+We make blank version.
+
+```{r}
+tmp.tab <- res_exp2_inh %>% as.data.frame %>% 
+  dplyr::filter(!is.na(padj) & !is.na(log2FoldChange)) %>%
+  dplyr::mutate(log = -log10(padj), 
+                log = ifelse(log == Inf, max(log[log != Inf])*1.02, log),
+                legend = case_when(abs(log2FoldChange) <= log2(1.5) & padj >= .05 ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
+                                   abs(log2FoldChange) <= log2(1.5) & padj < .05 ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
+                                   abs(log2FoldChange) > log2(1.5) & padj >= .05  ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
+                                   log2FoldChange > log2(1.5) & padj < .05 ~ 'p-adj < 0.05 and L2FC > log2(1.5)',
+                                   log2FoldChange < log2(1.5) & padj < .05 ~ 'p-adj < 0.05 and L2FC < -log2(1.5)'))
+  
+xlim.a <- max(abs(min(tmp.tab$log2FoldChange) - 0.1), 
+              abs(max(tmp.tab$log2FoldChange) + 0.1))
+ylim.a <- max(tmp.tab$log) * 1.08 
+diff.x.sig <- xlim.a - 1
+colPal <- c(col_WT, col_GTKO, 'gray50')
+names(colPal) <- c('p-adj < 0.05 and L2FC < -log2(1.5)', 'p-adj < 0.05 and L2FC > log2(1.5)', 'p-adj >= 0.05 or |L2FC| <= log2(1.5)')
+tmp.tab$symbols <- ifelse(rownames(tmp.tab) %in% c('Gzmb', 'Ifng', 'Casp1', 'Tnip1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4'), rownames(tmp.tab), '')
+tmp.tab$symbols[tmp.tab$symbols == 'Tnip1'] <- 'Abin1'
+volplot1_inh_blank <- ggplot(tmp.tab, aes(log2FoldChange, log)) + 
+        geom_point(aes(colour=legend), size = 2) + 
+        xlab('') +
+        ylab('') +
+        geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Abin1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4') & legend %in% c('p-adj < 0.05 and L2FC > log2(1.5)', 'p-adj < 0.05 and L2FC < -log2(1.5)')), pch = 21, size = 5, colour = 'red') +
+        scale_color_manual(values=colPal) +
+        annotate("rect", xmin = -Inf, xmax = -log2(1.5), ymin = ylim.a/1.06, ymax = Inf, fill = col_WT) +
+        annotate("rect", xmin = log2(1.5), xmax =Inf, ymin = ylim.a/1.06, ymax = Inf, fill = col_GTKO) +
+        geom_vline(xintercept = -log2(1.5), linetype="dashed", color = col_WT, size = 0.5) +
+        geom_vline(xintercept = log2(1.5), linetype="dashed", color = col_GTKO, size = 0.5) +
+        geom_hline(yintercept = -log10(0.05), linetype="dashed", color = "black", size = 0.5) +
+        xlim(-xlim.a, xlim.a) + ylim(0, ylim.a) + 
+        theme_classic() +
+        ggtitle('') +
+        theme(
+          axis.line.x = element_line(colour = "grey50"),
+          axis.line.y = element_line(colour = "grey50"),
+          axis.text.x=element_blank(),
+          axis.text.y=element_blank(),
+          plot.title = element_text(face="bold"),
+          legend.position='none'
+          )
+
+print(volplot1_inh_blank)
+```
+
+Write as tiff.
+
+```{r}
+tiff('exp2_Volcano_plot_WT_vs_GTKO_inh_blank.tiff', units = 'in', width = 4.5, height = 6.5, res = 150)
+print(volplot1_inh_blank)
+dev.off()
+```
+
 
 # Expression using WT samples only
 
@@ -720,7 +924,7 @@ volplot4 <- ggplot(tmp.tab, aes(log2FoldChange, log, label= symbols)) +
         geom_vline(xintercept = log2(1.5), linetype="dashed", color = col_Act, size = 0.5) +
         geom_hline(yintercept = -log10(0.05), linetype="dashed", color = "black", size = 0.5) +
         xlim(-xlim.a, xlim.a) + ylim(0, ylim.a) + geom_text_repel(ylim = c(0, ylim.a/1.1), seed = 120, max.overlaps = 10000) + 
-        ggtitle("Volcano plot of comparison between Activated and Inhibited cells \n from WT mice") + 
+        ggtitle("Volcano plot of comparison between Activated and Inhibited cells \n from GTKO mice") + 
         theme_classic() + 
         theme(
           axis.line.x = element_line(colour = "grey50"),
@@ -758,7 +962,7 @@ volplot4_zoom <- ggplot(tmp.tab, aes(log2FoldChange, log, label= symbols)) +
         geom_vline(xintercept = log2(1.5), linetype="dashed", color = col_Act, size = 0.5) +
         geom_hline(yintercept = -log10(0.05), linetype="dashed", color = "black", size = 0.5) +
         xlim(-xlim.a, xlim.a) + ylim(-40, ylim.a) + geom_text_repel(ylim = c(0, ylim.a/1.1), seed = 120, max.overlaps = 10000) + 
-        ggtitle("Volcano plot of comparison between Activated and Inhibited cells \n from WT mice") + 
+        ggtitle("Volcano plot of comparison between Activated and Inhibited cells \n from GTKO mice") + 
         theme_classic() + 
         theme(
           axis.line.x = element_line(colour = "grey50"),
@@ -817,7 +1021,7 @@ Write as tiff.
 
 ```{r}
 tiff('exp2_Volcano_plot_Inh_vs_Act_GTKO_blank.tiff', units = 'in', width = 4.5, height = 6.5, res = 150)
-print(volplot3_blank)
+print(volplot4_blank)
 dev.off()
 ```
 
@@ -827,8 +1031,11 @@ Finally write out some of data as .rds objects for future use.
 res_exp2 <- res_exp2 %>% as.data.frame()
 res_exp2$EnsemblID <- rowData(dds_exp2)$EnsemblID
 
+res_exp2_act_vs_inh <- res_exp2_act_vs_inh %>% as.data.frame()
+res_exp2_act_vs_inh$EnsemblID <- rowData(dds_exp2)$EnsemblID
+
 res_exp2_inh <- res_exp2_inh %>% as.data.frame()
-res_exp2_inh$EnsemblID <- rowData(dds_exp2)$EnsemblID
+res_exp2_inh$EnsemblID <- rowData(dds_exp2_inh)$EnsemblID
 
 res_exp2_act <- res_exp2_act %>% as.data.frame()
 res_exp2_act$EnsemblID <- rowData(dds_exp2_act)$EnsemblID
@@ -836,9 +1043,11 @@ res_exp2_act$EnsemblID <- rowData(dds_exp2_act)$EnsemblID
 saveRDS(rlog_exp2, 'Rds_data/exp2_rlog.rds')
 saveRDS(rlog_exp2_WT, 'Rds_data/exp2_rlog_WT.rds')
 saveRDS(rlog_exp2_GTKO, 'Rds_data/exp2_rlog_GTKO.rds')
+
 saveRDS(res_exp2, 'Rds_data/exp2_res_KO_vs_WT.rds')
-saveRDS(res_exp2_inh, 'Rds_data/exp2_res_Act_vs_Inh.rds')
+saveRDS(res_exp2_act_vs_inh, 'Rds_data/exp2_res_Act_vs_Inh.rds')
 saveRDS(res_exp2_act, 'Rds_data/exp2_res_KO_vs_WT_act_only.rds')
+saveRDS(res_exp2_inh, 'Rds_data/exp2_res_KO_vs_WT_inh_only.rds')
 
 saveRDS(dds_exp2, 'Rds_data/exp2_DESeq_all.rds')
 saveRDS(dds_exp2_act, 'Rds_data/exp2_DESeq_act.rds')
