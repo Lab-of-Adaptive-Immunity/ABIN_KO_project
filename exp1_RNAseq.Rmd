@@ -176,7 +176,7 @@ pca_Var <- pca_data_cmp$sdev^2/sum(pca_data_cmp$sdev^2)
 
 ```{r}
 pca1 <- ggplot(pca_data, aes(x = PC1, y = PC2, color = Knockout, shape = Activation)) +
-  geom_point(size = 3) +
+  geom_point(size = 5) +
   geom_text_repel(aes(label = rownames(pca_data)), col='black', seed = 120) +
   scale_color_manual(values = c(col_GTKO, col_WT)) +
   ggtitle(paste0('exp1 activated - Normalized PCA (design-aware, PC1 + PC2)' )) +
@@ -196,7 +196,7 @@ dev.off()
 
 ```{r}
 pca2 <- ggplot(pca_data, aes(x = PC2, y = PC3, color = Knockout, shape = Activation)) +
-  geom_point(size = 3) +
+  geom_point(size = 5) +
   geom_text_repel(aes(label = rownames(pca_data)), col='black', seed = 120) +
   scale_color_manual(values = c(col_GTKO, col_WT)) +
   ggtitle(paste0('exp1 activated - Normalized PCA (design-aware, PC2 + PC3)' )) +
@@ -218,7 +218,7 @@ Plot blank versions of pca for manual annotation.
 
 ```{r}
 pca1 <- ggplot(pca_data, aes(x = PC1, y = PC2, color = Knockout, shape = Activation)) +
-  geom_point(size = 3) +
+  geom_point(size = 5) +
   scale_color_manual(values = c(col_GTKO, col_WT)) +
   xlab('') + 
   ylab('') +
@@ -240,7 +240,7 @@ dev.off()
 
 ```{r}
 pca2 <- ggplot(pca_data, aes(x = PC2, y = PC3, color = Knockout, shape = Activation)) +
-  geom_point(size = 3) +
+  geom_point(size = 5) +
   scale_color_manual(values = c(col_GTKO, col_WT)) +
   theme_classic() +
   xlab('') + 
@@ -271,6 +271,24 @@ res_exp1 <- lfcShrink(dds = dds_exp1, contrast = c('Knockout', 'GTKO', 'WT'), ty
 We now plot volcano plot. 
 
 ```{r}
+tmp.tab <- res_exp1 %>% as.data.frame %>% 
+  dplyr::filter(!is.na(padj) & !is.na(log2FoldChange)) %>%
+  dplyr::mutate(log = -log10(padj), 
+                log = ifelse(log == Inf, max(log[log != Inf])*1.02, log),
+                legend = case_when(abs(log2FoldChange) <= log2(1.5) & padj >= .05 ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
+                                   abs(log2FoldChange) <= log2(1.5) & padj < .05 ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
+                                   abs(log2FoldChange) > log2(1.5) & padj >= .05  ~ 'p-adj >= 0.05 or |L2FC| <= log2(1.5)',
+                                   log2FoldChange > log2(1.5) & padj < .05 ~ 'p-adj < 0.05 and L2FC > log2(1.5)',
+                                   log2FoldChange < log2(1.5) & padj < .05 ~ 'p-adj < 0.05 and L2FC < -log2(1.5)'))
+
+xlim.a <- max(abs(min(tmp.tab$log2FoldChange) - 0.1), 
+              abs(max(tmp.tab$log2FoldChange) + 0.1))
+ylim.a <- max(tmp.tab$log) * 1.08 
+diff.x.sig <- xlim.a - 1
+colPal <- c(col_WT, col_GTKO, 'gray50')
+names(colPal) <- c('p-adj < 0.05 and L2FC < -log2(1.5)', 'p-adj < 0.05 and L2FC > log2(1.5)', 'p-adj >= 0.05 or |L2FC| <= log2(1.5)')
+tmp.tab$symbols <- ifelse(rownames(tmp.tab) %in% c('Gzmb', 'Ifng', 'Casp1', 'Tnip1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4'), rownames(tmp.tab), '')
+tmp.tab$symbols[tmp.tab$symbols == 'Tnip1'] <- 'Abin1'
 volplot1 <- ggplot(tmp.tab, aes(log2FoldChange, log, label= symbols)) + 
         geom_point(aes(colour=legend)) + xlab('Log2 Fold Change') + ylab('-log10(p.adj)') +
         geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Abin1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4')), pch = 21, size = 4, colour = 'red') +

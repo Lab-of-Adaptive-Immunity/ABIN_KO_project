@@ -187,7 +187,7 @@ pca_Var <- pca_data_cmp$sdev^2/sum(pca_data_cmp$sdev^2)
 
 ```{r}
 pca1 <- ggplot(pca_data, aes(x = PC1, y = PC2, color = Knockout, shape = Activation)) +
-  geom_point(size = 3) +
+  geom_point(size = 5) +
   geom_text_repel(aes(label = rownames(pca_data)), col='black', seed = 120) +
   scale_color_manual(values = c(col_GTKO, col_WT)) +
   ggtitle(paste0('exp2 - Normalized PCA (design-aware, PC1 + PC2)' )) +
@@ -208,7 +208,7 @@ dev.off()
 
 ```{r}
 pca2 <- ggplot(pca_data, aes(x = PC2, y = PC3, color = Knockout, shape = Activation)) +
-  geom_point(size = 3) +
+  geom_point(size = 5) +
   geom_text_repel(aes(label = rownames(pca_data)), col='black', seed = 120) +
   scale_color_manual(values = c(col_GTKO, col_WT)) +
   ggtitle(paste0('exp2 - Normalized PCA (design-aware, PC2 + PC3)' )) +
@@ -228,7 +228,7 @@ dev.off()
 ```
 ```{r}
 pca1_blank <- ggplot(pca_data, aes(x = PC1, y = PC2, color = Knockout, shape = Activation)) +
-  geom_point(size = 3) +
+  geom_point(size = 5) +
   scale_color_manual(values = c(col_GTKO, col_WT)) +
   xlab('') + 
   ylab('') +
@@ -251,7 +251,7 @@ dev.off()
 
 ```{r}
 pca2_blank <- ggplot(pca_data, aes(x = PC2, y = PC3, color = Knockout, shape = Activation)) +
-  geom_point(size = 3) +
+  geom_point(size = 5) +
   scale_color_manual(values = c(col_GTKO, col_WT)) +
   xlab('') + 
   ylab('') +
@@ -303,7 +303,7 @@ tmp.tab$symbols <- ifelse(rownames(tmp.tab) %in% c('Gzmb', 'Ifng', 'Casp1', 'Tni
 tmp.tab$symbols[tmp.tab$symbols == 'Tnip1'] <- 'Abin1'
 volplot1 <- ggplot(tmp.tab, aes(log2FoldChange, log, label= symbols)) + 
         geom_point(aes(colour=legend)) + xlab('Log2 Fold Change') + ylab('-log10(p.adj)') +
-        geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Abin1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4')), pch = 21, size = 4, colour = 'red') +
+        geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Abin1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4') & legend %in% c('p-adj < 0.05 and L2FC > log2(1.5)', 'p-adj < 0.05 and L2FC < -log2(1.5)')), pch = 21, size = 4, colour = 'red') +
         scale_color_manual(values=colPal) +
         annotate("rect", xmin = -Inf, xmax = -log2(1.5), ymin = ylim.a/1.06, ymax = Inf, fill = col_WT) +
         annotate("rect", xmin = log2(1.5), xmax =Inf, ymin = ylim.a/1.06, ymax = Inf, fill = col_GTKO) +
@@ -314,7 +314,7 @@ volplot1 <- ggplot(tmp.tab, aes(log2FoldChange, log, label= symbols)) +
         geom_vline(xintercept = -log2(1.5), linetype="dashed", color = col_WT, size = 0.5) +
         geom_vline(xintercept = log2(1.5), linetype="dashed", color = col_GTKO, size = 0.5) +
         geom_hline(yintercept = -log10(0.05), linetype="dashed", color = "black", size = 0.5) +
-        xlim(-xlim.a, xlim.a) + ylim(0, ylim.a) + geom_text_repel(ylim = c(0, ylim.a/1.1), seed = 120, max.overlaps = 100) + 
+        xlim(-xlim.a, xlim.a) + ylim(0, ylim.a) + geom_text_repel(ylim = c(0, ylim.a/1.1), seed = 120, max.overlaps = 10000) + 
         ggtitle("Volcano plot of comparison between GTKO and WT mice") + 
         theme_classic() + 
         theme(
@@ -358,7 +358,7 @@ volplot1_blank <- ggplot(tmp.tab, aes(log2FoldChange, log)) +
         geom_point(aes(colour=legend), size = 2) + 
         xlab('') +
         ylab('') +
-        geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Abin1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4')), pch = 21, size = 5, colour = 'red') +
+        geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Abin1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4') & legend %in% c('p-adj < 0.05 and L2FC > log2(1.5)', 'p-adj < 0.05 and L2FC < -log2(1.5)')), pch = 21, size = 5, colour = 'red') +
         scale_color_manual(values=colPal) +
         annotate("rect", xmin = -Inf, xmax = -log2(1.5), ymin = ylim.a/1.06, ymax = Inf, fill = col_WT) +
         annotate("rect", xmin = log2(1.5), xmax =Inf, ymin = ylim.a/1.06, ymax = Inf, fill = col_GTKO) +
@@ -415,7 +415,7 @@ tmp.tab$symbols <- ifelse(rownames(tmp.tab) %in% c('Gzmb', 'Ifng', 'Casp1', 'Tni
 tmp.tab$symbols[tmp.tab$symbols == 'Tnip1'] <- 'Abin1'
 volplot2 <- ggplot(tmp.tab, aes(log2FoldChange, log, label= symbols)) + 
         geom_point(aes(colour=legend)) + xlab('Log2 Fold Change') + ylab('-log10(p.adj)') +
-        geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Abin1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4')), pch = 21, size = 4, colour = 'red') +
+        geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Abin1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4') ), pch = 21, size = 4, colour = 'red') +
         scale_color_manual(values=colPal) +
         annotate("rect", xmin = -Inf, xmax = -log2(1.5), ymin = ylim.a/1.06, ymax = Inf, fill = col_WT) +
         annotate("rect", xmin = log2(1.5), xmax =Inf, ymin = ylim.a/1.06, ymax = Inf, fill = col_GTKO) +
@@ -719,7 +719,7 @@ volplot4 <- ggplot(tmp.tab, aes(log2FoldChange, log, label= symbols)) +
         geom_vline(xintercept = -log2(1.5), linetype="dashed", color = col_Inh, size = 0.5) +
         geom_vline(xintercept = log2(1.5), linetype="dashed", color = col_Act, size = 0.5) +
         geom_hline(yintercept = -log10(0.05), linetype="dashed", color = "black", size = 0.5) +
-        xlim(-xlim.a, xlim.a) + ylim(0, ylim.a) + geom_text_repel(ylim = c(0, ylim.a/1.1), seed = 120, max.overlaps = 1000) + 
+        xlim(-xlim.a, xlim.a) + ylim(0, ylim.a) + geom_text_repel(ylim = c(0, ylim.a/1.1), seed = 120, max.overlaps = 10000) + 
         ggtitle("Volcano plot of comparison between Activated and Inhibited cells \n from WT mice") + 
         theme_classic() + 
         theme(
