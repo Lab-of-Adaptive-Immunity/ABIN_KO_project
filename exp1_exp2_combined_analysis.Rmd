@@ -1,0 +1,384 @@
+---
+title: "RNAseq Sarka II"
+author: "Juraj Michalik"
+date: "2023-05-10"
+output: rmdformats::material
+---
+
+Performing some supplementary data analysis using bulk RNA seq data from Sarka's experiment.
+
+```{r, include = F}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(DESeq2)
+library(dplyr)
+library(ggrepel)
+library(magrittr)
+library(clusterProfiler)
+library(fgsea)
+library(pheatmap)
+library(dichromat)
+library(limma)
+library(DT)
+```
+
+
+## Correlation of log2fold change between experiments
+
+Load data from files with log-fold change.
+
+```{r}
+fold_change_bulk_exp2 <- readRDS('Rds_data/exp2_res_KO_vs_WT_act_only.rds')
+fold_change_bulk_exp1 <- readRDS('Rds_data/exp1_res_KO_vs_WT_act_only.rds')
+```
+
+Filter table and join them into solitary table.
+
+```{r}
+fold_change_bulk_exp1 <- fold_change_bulk_exp1[c('log2FoldChange', 'EnsemblID')]
+fold_change_bulk_exp1$symbol <- rownames(fold_change_bulk_exp1)
+fold_change_bulk_exp2 <- fold_change_bulk_exp2[c('log2FoldChange', 'EnsemblID')]
+fold_change_bulk_exp2$symbol <- rownames(fold_change_bulk_exp2)
+
+# join data
+fold_change_integ <- fold_change_bulk_exp1 %>% 
+  dplyr::inner_join(fold_change_bulk_exp2, by = c('EnsemblID' = 'EnsemblID'), suffix = c(".exp1", ".exp2")) %>%
+  dplyr::select(-symbol.exp2) %>% dplyr::rename(symbol = symbol.exp1) %>%
+  dplyr::relocate(log2FoldChange.exp1, .after = symbol)
+```
+
+Filtered data to be used to determine the list of A) up-regulated genes and B) down-regulated genes.
+
+```{r}
+fc_upreg_set_exp1_exp2 <- fold_change_integ %>% dplyr::filter(log2FoldChange.exp1 > log2(1.5) & log2FoldChange.exp2 > log2(1.5))
+fc_downreg_set_exp1_exp2 <- fold_change_integ %>% dplyr::filter(log2FoldChange.exp1 < log2(2/3) & log2FoldChange.exp2 < log2(2/3))
+```
+
+We also remove Tnip1 from the second list.
+
+```{r}
+fc_downreg_set_exp1_exp2 <- fc_downreg_set_exp1_exp2[fc_downreg_set_exp1_exp2$symbol != 'Tnip1',]
+```
+
+Trying linear model for whole data set (we will ignore it though because it doesn't really correspond).
+
+```{r}
+lmExps_fold <- lm(log2FoldChange.exp2 ~ log2FoldChange.exp1, data = fold_change_integ)
+lmExps_fold_sum <- summary(lmExps_fold)
+
+lm_data_fold <- data.frame(label = paste0('p-val. (intercept): ', round(lmExps_fold_sum$coefficients[1,4], 4),
+                                          ', p-val. (slope): ', round(lmExps_fold_sum$coefficients[2,4], 4)),
+                           xpos = -Inf, ypos = Inf, hjust = -0.01, vjust = 1)
+```
+
+Plot.
+
+```{r}
+fold_change_integ$label <- ifelse(fold_change_integ$symbol %in% c('Gzmb', 'Ifng', 'Casp1', 'Tnip1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4'),
+                                  fold_change_integ$symbol, '')
+
+
+fold_change_integ$label[fold_change_integ$label == 'Tnip1'] <- 'Abin1'
+
+lplot1 <- ggplot(fold_change_integ, aes(x = log2FoldChange.exp1, y = log2FoldChange.exp2, label = label)) +
+  geom_point(col = 'red', size = 2) + 
+  geom_text(data = lm_data_fold, aes(x = xpos, y = ypos, hjust = hjust, vjust = vjust, label = label), col = 'blue') +
+  geom_point(data = fold_change_integ %>% dplyr::filter(label != ''), pch = 21, size = 4, colour = 'purple') +
+  xlab('L2FC (exp1, activated Mice only)') +
+  ylab('L2FC (exp2, activated uninhibited Mice only)') +
+  geom_segment(x=log2(1.5), xend=Inf, y=log2(1.5), yend=log2(1.5), linetype = 'dashed', size = 0.15) +
+  geom_segment(x=log2(1.5), xend=log2(1.5), y=log2(1.5), yend=Inf, linetype = 'dashed', size = 0.15) +
+  geom_segment(x=-log2(1.5), xend=-Inf, y=-log2(1.5), yend=-log2(1.5), linetype = 'dashed', size = 0.15) +
+  geom_segment(x=-log2(1.5), xend=-log2(1.5), y=-log2(1.5), yend=-Inf, linetype = 'dashed', size = 0.15) +
+  geom_text_repel(max.overlaps = 100, seed = 10) +
+  theme_classic() +
+  annotate('text',  
+           col = 'blue',
+           x = min(fold_change_integ$log2FoldChange.exp1), 
+           y = lmExps_fold$coefficients[1] + lmExps_fold $coefficients[2] * min(fold_change_integ$log2FoldChange.exp1) - 0.25, 
+           label = paste0('y = ', round(lmExps_fold$coefficients[2], 3), ' + ',  round(lmExps_fold$coefficients[1], 3)),
+           hjust = 0) +
+  geom_abline(slope = lmExps_fold$coefficients[2], intercept = lmExps_fold$coefficients[1], col = 'blue') + 
+  geom_abline(slope = 1, linetype = 'dashed', col = 'firebrick4') + 
+  geom_vline(xintercept = 0, linetype = 'dashed') +
+  geom_hline(yintercept = 0, linetype = 'dashed') +
+  ggtitle('Comparison of L2FC (using LFC shrinkage) for contrast \n of GTKO vs. WT mice between experiments 1 and 2') +
+  theme(
+    axis.line.x = element_line(colour = "grey50"),
+    axis.line.y = element_line(colour = "grey50"),
+    plot.title = element_text(face="bold", hjust = 0.5))
+
+print(lplot1)
+```
+
+Write as tiff.
+
+```{r}
+tiff('exp1_exp2_linear_plot.tiff', units = 'in', width = 7.5, height = 5.5, res = 150)
+print(lplot1)
+dev.off()
+```
+
+We also write reduced, blank version.
+
+```{r}
+fold_change_integ$label <- ifelse(fold_change_integ$symbol %in% c('Gzmb', 'Ifng', 'Casp1', 'Tnip1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4'),
+                                  fold_change_integ$symbol, '')
+
+
+fold_change_integ$label[fold_change_integ$label == 'Tnip1'] <- 'Abin1'
+
+lplot1 <- ggplot(fold_change_integ, aes(x = log2FoldChange.exp1, y = log2FoldChange.exp2)) +
+  geom_point(col = 'red', size = 2) + 
+  geom_point(data = fold_change_integ %>% dplyr::filter(label != ''), pch = 21, size = 4, colour = 'purple') +
+  xlab('') +
+  ylab('') +
+  theme_classic() +
+  geom_abline(slope = lmExps_fold$coefficients[2], intercept = lmExps_fold$coefficients[1], col = 'blue') + 
+  geom_abline(slope = 1, linetype = 'dashed', col = 'firebrick4') + 
+  geom_vline(xintercept = 0, linetype = 'dashed') +
+  geom_hline(yintercept = 0, linetype = 'dashed') +
+  ggtitle('\n') +
+  theme(
+    axis.line.x = element_line(colour = "grey50"),
+    axis.line.y = element_line(colour = "grey50"),
+    axis.text.x=element_blank(),
+    axis.text.y=element_blank(),
+    plot.title = element_text(face="bold", hjust = 0.5))
+
+print(lplot1)
+```
+
+Write as tiff.
+
+```{r}
+tiff('exp1_exp2_linear_plot_blank.tiff', units = 'in', width = 7.5, height = 5.5, res = 150)
+print(lplot1)
+dev.off()
+```
+
+Showing same graph for positive values only.
+
+```{r, warning=F, message=F}
+ggplot(fc_upreg_set_exp1_exp2, aes(x = log2FoldChange.exp1, y = log2FoldChange.exp2, label = symbol)) +
+  geom_point(col = 'red', size = 0.25) + 
+  xlab('log2fc (RNAseq1, purely act. only)') +
+  ylab('log2fc (RNAseq2, act. only)') +
+  geom_text_repel(max.overlaps = 30) +
+  annotate('text',  
+           col = 'purple',
+           x = min(fc_upreg_set_exp1_exp2$log2FoldChange.exp1), 
+           y = max(fc_upreg_set_exp1_exp2$log2FoldChange.exp2), 
+           label = paste('Number of genes:', nrow(fc_upreg_set_exp1_exp2)),
+           hjust = 0) +
+  theme_classic() + 
+  geom_abline(slope = 1, linetype = 'dashed', col = 'firebrick4') + 
+  geom_vline(xintercept = 0, linetype = 'dashed') +
+  geom_hline(yintercept = 0, linetype = 'dashed') +
+  ggtitle('Comparison of lfc-shrunk log2fc (GTKO vs. WT contrast) between \n activated cells of two experiments (log2fc < log2(1.5) for both filtered out)') +
+  theme(
+    axis.line.x = element_line(colour = "grey50"),
+    axis.line.y = element_line(colour = "grey50"),
+    plot.title = element_text(face="bold"))
+```
+
+```{r}
+ggplot(fc_downreg_set_exp1_exp2, aes(x = log2FoldChange.exp1, y = log2FoldChange.exp2, label = symbol)) +
+  geom_point(col = 'red', size = 0.25) + 
+  xlab('log2fc (RNAseq1, purely act. only)') +
+  ylab('log2fc (RNAseq2, act. only)') +
+  geom_text_repel(max.overlaps = 30) +
+  annotate('text',  
+           col = 'purple',
+           x = min(fc_downreg_set_exp1_exp2$log2FoldChange.exp1), 
+           y = max(fc_downreg_set_exp1_exp2$log2FoldChange.exp2), 
+           label = paste('Number of genes:', nrow(fc_downreg_set_exp1_exp2)),
+           hjust = 0) +
+  theme_classic() + 
+  geom_abline(slope = 1, linetype = 'dashed', col = 'firebrick4') + 
+  geom_vline(xintercept = 0, linetype = 'dashed') +
+  geom_hline(yintercept = 0, linetype = 'dashed') +
+  ggtitle('Comparison of lfc-shrunk log2fc (GTKO vs. WT contrast) between \n activated cells of two experiments (log2fc > log2(2/3) for both filtered out)') +
+  theme(
+    axis.line.x = element_line(colour = "grey50"),
+    axis.line.y = element_line(colour = "grey50"),
+    plot.title = element_text(face="bold"))
+```
+
+## GSEA using gene sets
+
+Now we select all genes that are up-regulated in both experiments for GTKO mice.
+
+```{r}
+GSEA.genes <- list()
+GSEA.genes[['Activated_in_GTKO']] <- fc_upreg_set_exp1_exp2$EnsemblID
+GSEA.genes[['Deactivated_in_GTKO']] <- fc_downreg_set_exp1_exp2$EnsemblID
+```
+
+Write lists to file along with their symbol.
+
+```{r}
+write.csv(fc_upreg_set_exp1_exp2[c('EnsemblID', 'symbol')],'GSEA_tables/exp1_exp2_up_regulated_genes.csv')
+write.csv(fc_downreg_set_exp1_exp2[c('EnsemblID', 'symbol')],'GSEA_tables/exp1_exp2_down_regulated_genes.csv')
+```
+
+Print the list of all kept genes.
+
+```{r}
+DT::datatable(fc_upreg_set_exp1_exp2 %>% dplyr::mutate_if(is.numeric, round, digits = 3), 
+              caption = 'Fold changes between GTKO and WT between previous and this experiment (exp1 and exp2 resp.,sig. upreg. in both)')
+DT::datatable(fc_downreg_set_exp1_exp2 %>% dplyr::mutate_if(is.numeric, round, digits = 3), 
+              caption = 'Fold changes between GTKO and WT between previous and this experiment (exp1 and exp2 resp., sig. downreg. in both)')
+```
+
+Load all lists comparing activated cells with activated + p38i.
+
+```{r}
+fold_change_bulk_exp2_p38i_all <- readRDS('Rds_data/exp2_res_Act_vs_Inh.rds')
+```
+
+Build ranked list for each.
+
+```{r}
+ranked_all <- fold_change_bulk_exp2_p38i_all$log2FoldChange
+names(ranked_all) <- fold_change_bulk_exp2_p38i_all$EnsemblID
+```
+
+Now do GSEA.
+
+```{r, include = F}
+set.seed(42)
+fgsea_all <- fgsea(pathways = GSEA.genes, 
+                  stats = ranked_all,
+                  nperm=500000)
+```
+
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(GSEA.genes[['Activated_in_GTKO']], ranked_all)$data
+
+xcoord <- max(GSE_data$x) * 0.55
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.9 + min(GSE_data$y)
+ycoord2 <- yrange * 0.8 + min(GSE_data$y)
+ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
+  
+GSEA1_pos <- plotEnrichment(GSEA.genes[['Activated_in_GTKO']],
+               ranked_all) + 
+  annotate("text", label = paste('pval = ', round(fgsea_all$pval[1], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_all$NES[1], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', length(GSEA.genes[['Activated_in_GTKO']])), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set of genes up-regulated in GTKO mice,\n for contrast of Activated vs. Inhibited Mice') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA1_pos)
+```
+
+```{r}
+tiff('exp1_exp2_GSEA_upreg.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA1_pos)
+dev.off()
+```
+Plot variant without graphics.
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+GSEA1_pos_blank <- plotEnrichment(GSEA.genes[['Activated_in_GTKO']],
+               ranked_all) + 
+  ggtitle('\n') +
+  theme_classic() + 
+  xlab('') + ylab('') +
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank())
+
+print(GSEA1_pos_blank)
+```
+
+```{r}
+tiff('exp1_exp2_GSEA_upreg_blank.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA1_pos_blank)
+dev.off()
+```
+
+Now do the same for 19 downregulated genes.
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+GSE_data <- plotEnrichment(GSEA.genes[['Deactivated_in_GTKO']], ranked_all)$data
+
+xcoord <- max(GSE_data$x) * 0.55
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.9 + min(GSE_data$y)
+ycoord2 <- yrange * 0.8 + min(GSE_data$y)
+ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
+
+GSEA1_neg <- plotEnrichment(GSEA.genes[['Deactivated_in_GTKO']], ranked_all) + 
+  annotate("text", label = paste('pval = ', round(fgsea_all$pval[2], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_all$NES[2], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', length(GSEA.genes[['Deactivated_in_GTKO']])), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set of genes down-regulated in GTKO mice,\n for contrast of Activated vs. Inhibited Mice') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA1_neg)
+```
+
+```{r}
+tiff('exp1_exp2_GSEA_downreg.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA1_neg)
+dev.off()
+```
+
+Blank variant.
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+GSEA2_pos_blank <- plotEnrichment(GSEA.genes[['Deactivated_in_GTKO']],
+               ranked_all) + 
+  ggtitle('\n') +
+  theme_classic() + 
+  xlab('') + ylab('') +
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank())
+
+print(GSEA2_pos_blank)
+```
+
+```{r}
+tiff('exp1_exp2_GSEA_downreg_blank.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA2_pos_blank)
+dev.off()
+```
+
+
+## Plotting genes that appear in GSEA list.
+
+Load data from dds (rld) object to show.
+
+```{r}
+rld.file <- readRDS('Rds_data/exp2_rlog.rds')
+```
+
+Now draw base heatmap, with clustering by columns and ordered by L2FC. We handle batch effect using limma. We also disable clustering by row.
+
+```{r, fig.width=6, fig.height=14}
+All_ranked_up_by_exp2 <- fold_change_bulk_exp2_p38i_all %>% dplyr::filter(EnsemblID %in% GSEA.genes[['Activated_in_GTKO']]) %>% dplyr::arrange(-log2FoldChange)
+
+tiff('exp2_GSEA_Select_heatmap.tiff', units = 'in', width = 4.5, height = 9.5, res = 150)
+
+rld.meta <- as.data.frame(colData(rld.file))[c('Experiment', 'Knockout','Activation')]
+rld.batch <- limma::removeBatchEffect(assay(rld.file)[rownames(All_ranked_up_by_exp2),], rld.meta$Experiment)
+pheatmap(rld.batch, annotation_col=rld.meta, cluster_rows = F, cluster_cols = F, border_color = NA, 
+         color = colorRampPalette(c("blue", "white", "red"))(50), scale = 'row', 
+         main = 'Heatmap of genes of Activated vs. Inhibited mice (batch-corr.) \nup-regulated for contrast GTKO vs. KO',
+         fontsize = 6, fontsize_row = 7, fontsize_col = 9)
+
+dev.off()
+```
+
+```{r, fig.width=8, fig.height=7}
+rld.batch.20 <- rld.batch[1:20,]
+pheatmap(rld.batch.20, annotation_col=rld.meta, cluster_rows = F, cluster_cols = F, border_color = NA, 
+         color = colorRampPalette(c("blue", "white", "red"))(50), scale = 'row', 
+         main = 'Heatmap of genes of Act. vs. Act. + p38i mice (All mice, batch-corr.) \nup-regulated for contrast GTKO vs. KO, top 20 genes',
+         fontsize = 9, fontsize_row = 10, fontsize_col = 10)
+```
