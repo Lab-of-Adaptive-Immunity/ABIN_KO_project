@@ -81,9 +81,9 @@ fold_change_integ$label <- ifelse(fold_change_integ$symbol %in% c('Gzmb', 'Ifng'
 fold_change_integ$label[fold_change_integ$label == 'Tnip1'] <- 'Abin1'
 
 lplot1 <- ggplot(fold_change_integ, aes(x = log2FoldChange.exp1, y = log2FoldChange.exp2, label = label)) +
-  geom_point(col = 'red', size = 2) + 
-  geom_text(data = lm_data_fold, aes(x = xpos, y = ypos, hjust = hjust, vjust = vjust, label = label), col = 'blue') +
-  geom_point(data = fold_change_integ %>% dplyr::filter(label != ''), pch = 21, size = 4, colour = 'purple') +
+  geom_point(col = '#808080', size = 2) + 
+  geom_text(data = lm_data_fold, aes(x = xpos, y = ypos, hjust = hjust, vjust = vjust, label = label), col = 'firebrick3') +
+  geom_point(data = fold_change_integ %>% dplyr::filter(label != ''), pch = 21, size = 4, colour = 'firebrick3') +
   xlab('L2FC (exp1, activated Mice only)') +
   ylab('L2FC (exp2, activated uninhibited Mice only)') +
   geom_segment(x=log2(1.5), xend=Inf, y=log2(1.5), yend=log2(1.5), linetype = 'dashed', size = 0.15) +
@@ -93,13 +93,13 @@ lplot1 <- ggplot(fold_change_integ, aes(x = log2FoldChange.exp1, y = log2FoldCha
   geom_text_repel(max.overlaps = 100, seed = 10) +
   theme_classic() +
   annotate('text',  
-           col = 'blue',
+           col = 'firebrick3',
            x = min(fold_change_integ$log2FoldChange.exp1), 
            y = lmExps_fold$coefficients[1] + lmExps_fold $coefficients[2] * min(fold_change_integ$log2FoldChange.exp1) - 0.25, 
            label = paste0('y = ', round(lmExps_fold$coefficients[2], 3), ' + ',  round(lmExps_fold$coefficients[1], 3)),
            hjust = 0) +
-  geom_abline(slope = lmExps_fold$coefficients[2], intercept = lmExps_fold$coefficients[1], col = 'blue') + 
-  geom_abline(slope = 1, linetype = 'dashed', col = 'firebrick4') + 
+  geom_abline(slope = lmExps_fold$coefficients[2], intercept = lmExps_fold$coefficients[1], col = 'firebrick3') + 
+  geom_abline(slope = 1, linetype = 'dashed', col = 'black') + 
   geom_vline(xintercept = 0, linetype = 'dashed') +
   geom_hline(yintercept = 0, linetype = 'dashed') +
   ggtitle('Comparison of L2FC (using LFC shrinkage) for contrast \n of GTKO vs. WT mice between experiments 1 and 2') +
@@ -129,13 +129,13 @@ fold_change_integ$label <- ifelse(fold_change_integ$symbol %in% c('Gzmb', 'Ifng'
 fold_change_integ$label[fold_change_integ$label == 'Tnip1'] <- 'Abin1'
 
 lplot1 <- ggplot(fold_change_integ, aes(x = log2FoldChange.exp1, y = log2FoldChange.exp2)) +
-  geom_point(col = 'red', size = 2) + 
-  geom_point(data = fold_change_integ %>% dplyr::filter(label != ''), pch = 21, size = 4, colour = 'purple') +
+  geom_point(col = '#808080', size = 2) + 
+  geom_point(data = fold_change_integ %>% dplyr::filter(label != ''), pch = 21, size = 4, colour = 'firebrick3') +
   xlab('') +
   ylab('') +
   theme_classic() +
-  geom_abline(slope = lmExps_fold$coefficients[2], intercept = lmExps_fold$coefficients[1], col = 'blue') + 
-  geom_abline(slope = 1, linetype = 'dashed', col = 'firebrick4') + 
+  geom_abline(slope = lmExps_fold$coefficients[2], intercept = lmExps_fold$coefficients[1], col = 'firebrick3') + 
+  geom_abline(slope = 1, linetype = 'dashed', col = 'black') + 
   geom_vline(xintercept = 0, linetype = 'dashed') +
   geom_hline(yintercept = 0, linetype = 'dashed') +
   ggtitle('\n') +
@@ -161,18 +161,18 @@ Showing same graph for positive values only.
 
 ```{r, warning=F, message=F}
 ggplot(fc_upreg_set_exp1_exp2, aes(x = log2FoldChange.exp1, y = log2FoldChange.exp2, label = symbol)) +
-  geom_point(col = 'red', size = 0.25) + 
+  geom_point(col = '#808080', size = 0.25) + 
   xlab('log2fc (RNAseq1, purely act. only)') +
   ylab('log2fc (RNAseq2, act. only)') +
   geom_text_repel(max.overlaps = 30) +
   annotate('text',  
-           col = 'purple',
+           col = 'firebrick3',
            x = min(fc_upreg_set_exp1_exp2$log2FoldChange.exp1), 
            y = max(fc_upreg_set_exp1_exp2$log2FoldChange.exp2), 
            label = paste('Number of genes:', nrow(fc_upreg_set_exp1_exp2)),
            hjust = 0) +
   theme_classic() + 
-  geom_abline(slope = 1, linetype = 'dashed', col = 'firebrick4') + 
+  geom_abline(slope = 1, linetype = 'dashed', col = 'black') + 
   geom_vline(xintercept = 0, linetype = 'dashed') +
   geom_hline(yintercept = 0, linetype = 'dashed') +
   ggtitle('Comparison of lfc-shrunk log2fc (GTKO vs. WT contrast) between \n activated cells of two experiments (log2fc < log2(1.5) for both filtered out)') +
@@ -184,18 +184,18 @@ ggplot(fc_upreg_set_exp1_exp2, aes(x = log2FoldChange.exp1, y = log2FoldChange.e
 
 ```{r}
 ggplot(fc_downreg_set_exp1_exp2, aes(x = log2FoldChange.exp1, y = log2FoldChange.exp2, label = symbol)) +
-  geom_point(col = 'red', size = 0.25) + 
+  geom_point(col = '#808080', size = 0.25) + 
   xlab('log2fc (RNAseq1, purely act. only)') +
   ylab('log2fc (RNAseq2, act. only)') +
   geom_text_repel(max.overlaps = 30) +
   annotate('text',  
-           col = 'purple',
+           col = 'firebrick3',
            x = min(fc_downreg_set_exp1_exp2$log2FoldChange.exp1), 
            y = max(fc_downreg_set_exp1_exp2$log2FoldChange.exp2), 
            label = paste('Number of genes:', nrow(fc_downreg_set_exp1_exp2)),
            hjust = 0) +
   theme_classic() + 
-  geom_abline(slope = 1, linetype = 'dashed', col = 'firebrick4') + 
+  geom_abline(slope = 1, linetype = 'dashed', col = 'black') + 
   geom_vline(xintercept = 0, linetype = 'dashed') +
   geom_hline(yintercept = 0, linetype = 'dashed') +
   ggtitle('Comparison of lfc-shrunk log2fc (GTKO vs. WT contrast) between \n activated cells of two experiments (log2fc > log2(2/3) for both filtered out)') +
@@ -218,8 +218,8 @@ GSEA.genes[['Deactivated_in_GTKO']] <- fc_downreg_set_exp1_exp2$EnsemblID
 Write lists to file along with their symbol.
 
 ```{r}
-write.csv(fc_upreg_set_exp1_exp2[c('EnsemblID', 'symbol')],'GSEA_tables/exp1_exp2_up_regulated_genes.csv')
-write.csv(fc_downreg_set_exp1_exp2[c('EnsemblID', 'symbol')],'GSEA_tables/exp1_exp2_down_regulated_genes.csv')
+write.csv(fc_upreg_set_exp1_exp2[c('EnsemblID', 'symbol')],'GSEA_tables/GSEA_exp1_exp2_up_regulated_genes.csv')
+write.csv(fc_downreg_set_exp1_exp2[c('EnsemblID', 'symbol')],'GSEA_tables/GSEA_exp1_exp2_down_regulated_genes.csv')
 ```
 
 Print the list of all kept genes.
@@ -248,9 +248,9 @@ Now do GSEA.
 
 ```{r, include = F}
 set.seed(42)
-fgsea_all <- fgsea(pathways = GSEA.genes, 
-                  stats = ranked_all,
-                  nperm=500000)
+fgsea_all <- fgsea(pathways = GSEA.genes,
+                   stats = ranked_all,
+                   nperm=500000)
 ```
 
 
@@ -266,7 +266,7 @@ ycoord3 <- yrange * 0.7 + min(GSE_data$y)
   
 GSEA1_pos <- plotEnrichment(GSEA.genes[['Activated_in_GTKO']],
                ranked_all) + 
-  annotate("text", label = paste('pval = ', round(fgsea_all$pval[1], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('padj = ', round(fgsea_all$padj[1], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
   annotate("text", label = paste('NES = ', round(fgsea_all$NES[1], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
   annotate("text", label = paste('Number of genes: ', length(GSEA.genes[['Activated_in_GTKO']])), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
   ggtitle('GSEA of gene set of genes up-regulated in GTKO mice,\n for contrast of Activated vs. Inhibited Mice') +
@@ -313,7 +313,7 @@ ycoord2 <- yrange * 0.8 + min(GSE_data$y)
 ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
 
 GSEA1_neg <- plotEnrichment(GSEA.genes[['Deactivated_in_GTKO']], ranked_all) + 
-  annotate("text", label = paste('pval = ', round(fgsea_all$pval[2], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('padj = ', round(fgsea_all$padj[2], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
   annotate("text", label = paste('NES = ', round(fgsea_all$NES[2], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
   annotate("text", label = paste('Number of genes: ', length(GSEA.genes[['Deactivated_in_GTKO']])), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
   ggtitle('GSEA of gene set of genes down-regulated in GTKO mice,\n for contrast of Activated vs. Inhibited Mice') +
