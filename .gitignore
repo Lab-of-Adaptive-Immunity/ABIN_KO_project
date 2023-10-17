@@ -1,5 +1,8 @@
 /GSEA_tables/*
+/Tables/*
+/Figures/*
 /Rds_data/*
+Mus_musculus.GRCm39.106.gtf
 /*.tiff
 /*.pdf
 /*.html

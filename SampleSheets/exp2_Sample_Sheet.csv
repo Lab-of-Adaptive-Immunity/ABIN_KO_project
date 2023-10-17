@@ -1,0 +1,13 @@
+SampleName,Experiment,Knockout,Activation
+A1WT1ku1_activated_B26_17,17,WT,Act
+A2WT1ku1_activated_B26_18,18,WT,Act
+A3WT1ku1_activated_B26_19,19,WT,Act
+B1WT1ku1_activatedplusp38i_B26_17,17,WT,Act_and_p38i
+B2WT1ku1_activatedplusp38i_B26_18,18,WT,Act_and_p38i
+B3WT1ku1_activatedplusp38i_B26_19,19,WT,Act_and_p38i
+C1GTKO1ku1_activated_B26_17,17,GTKO,Act
+C2GTKO1ku1_activated_B26_18,18,GTKO,Act
+C3GTKO1ku1_activated_B26_19,19,GTKO,Act
+D1GTKO1ku1_activatedplusp38i_B26_17,17,GTKO,Act_and_p38i
+D2GTKO1ku1_activatedplusp38i_B26_18,18,GTKO,Act_and_p38i
+D3GTKO1ku1_activatedplusp38i_B26_19,19,GTKO,Act_and_p38i

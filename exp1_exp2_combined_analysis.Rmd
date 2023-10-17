@@ -20,6 +20,8 @@ library(pheatmap)
 library(dichromat)
 library(limma)
 library(DT)
+
+dir.create(file.path('GSEA_tables/'), showWarnings = F)
 ```
 
 
@@ -114,7 +116,7 @@ print(lplot1)
 Write as tiff.
 
 ```{r}
-tiff('exp1_exp2_linear_plot.tiff', units = 'in', width = 7.5, height = 5.5, res = 150)
+tiff('Figures/exp1_exp2_linear_plot.tiff', units = 'in', width = 7.5, height = 5.5, res = 150)
 print(lplot1)
 dev.off()
 ```
@@ -152,7 +154,7 @@ print(lplot1)
 Write as tiff.
 
 ```{r}
-tiff('exp1_exp2_linear_plot_blank.tiff', units = 'in', width = 7.5, height = 5.5, res = 150)
+tiff('Figures/exp1_exp2_linear_plot_blank.tiff', units = 'in', width = 7.5, height = 5.5, res = 150)
 print(lplot1)
 dev.off()
 ```
@@ -277,7 +279,7 @@ print(GSEA1_pos)
 ```
 
 ```{r}
-tiff('exp1_exp2_GSEA_upreg.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+tiff('Figures/exp1_exp2_GSEA_upreg.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
 print(GSEA1_pos)
 dev.off()
 ```
@@ -296,7 +298,7 @@ print(GSEA1_pos_blank)
 ```
 
 ```{r}
-tiff('exp1_exp2_GSEA_upreg_blank.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+tiff('Figures/exp1_exp2_GSEA_upreg_blank.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
 print(GSEA1_pos_blank)
 dev.off()
 ```
@@ -324,7 +326,7 @@ print(GSEA1_neg)
 ```
 
 ```{r}
-tiff('exp1_exp2_GSEA_downreg.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+tiff('Figures/exp1_exp2_GSEA_downreg.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
 print(GSEA1_neg)
 dev.off()
 ```
@@ -344,7 +346,7 @@ print(GSEA2_pos_blank)
 ```
 
 ```{r}
-tiff('exp1_exp2_GSEA_downreg_blank.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+tiff('Figures/exp1_exp2_GSEA_downreg_blank.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
 print(GSEA2_pos_blank)
 dev.off()
 ```
@@ -363,7 +365,7 @@ Now draw base heatmap, with clustering by columns and ordered by L2FC. We handle
 ```{r, fig.width=6, fig.height=14}
 All_ranked_up_by_exp2 <- fold_change_bulk_exp2_p38i_all %>% dplyr::filter(EnsemblID %in% GSEA.genes[['Activated_in_GTKO']]) %>% dplyr::arrange(-log2FoldChange)
 
-tiff('exp2_GSEA_Select_heatmap.tiff', units = 'in', width = 4.5, height = 9.5, res = 150)
+tiff('Figures/exp2_GSEA_Select_heatmap.tiff', units = 'in', width = 4.5, height = 9.5, res = 150)
 
 rld.meta <- as.data.frame(colData(rld.file))[c('Experiment', 'Knockout','Activation')]
 rld.batch <- limma::removeBatchEffect(assay(rld.file)[rownames(All_ranked_up_by_exp2),], rld.meta$Experiment)
