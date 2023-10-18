@@ -16,10 +16,11 @@ Data Accession: [GSE245397](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?&acc=
 
 3. Create Fastqs directory in ABIN_KO_project, go in it (cd ABIN_KO_project) and download all .fastq files from GSE245397 accession number to it.
 
-4. In ABIN_KO_project, create indices for STAR 2.7.10a aligner form GRCm39 v106 mouse assembkly (Ensembl). Files needed can be downloaded [here](https://ftp.ensembl.org/pub/release-106/) (navigate to gtf and fasta directories and download files mendtioned in command). The command to generate indices stored in directory GRCm39 is:
+4. In ABIN_KO_project, create indices for STAR 2.7.10a aligner form GRCm39 v106 mouse assembkly (Ensembl). Files needed can be downloaded [here](https://ftp.ensembl.org/pub/release-106/) (navigate to gtf and fasta directories and download files mendtioned in command). The command to generate indices stored in directory GRCm39 is:\
+5. 
  STAR --runThreadN 20 --runMode genomeGenerate --genomeDir GRCm39 v106 --genomeFastaFiles Mus_musculus.GRCm39.dna.primary_assembly.fa --sjdbGTFfile Mus_musculus.GRCm39.106.gtf
 
-5. Return to ABIN_KO_project directory (cd ..) and successively run following files. This will merge fastq files from the same samples and then align them :
+6. Return to ABIN_KO_project directory (cd ..) and successively run following files. This will merge fastq files from the same samples and then align them :
 
 * exp01_merge_fastq_QC.sh
 * exp01_run_STAR.sh
