@@ -1,4 +1,5 @@
 /GSEA_tables/*
+/Bamfiles*/*
 /Tables/*
 /Figures/*
 /Rds_data/*
