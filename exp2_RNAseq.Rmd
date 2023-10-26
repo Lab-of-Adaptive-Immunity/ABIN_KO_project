@@ -5,7 +5,7 @@ date: "2023-07-19"
 output: html_document
 ---
 
-Processing of exp2 of Sarka Janusova Bulk data (activated vs. activated with inhibition mice).
+Analysis of second experiment from Bulk data (GTKO vs. WT mice - activated and activated + inhibited).
 
 # Setup
 
@@ -147,7 +147,7 @@ round(colSums(assay(expcounts)) / 1e6, 1)
 
 # Preparation of DESeq2 object
 
-Here we prepare DESeq object. We want to take into account KO factor but also activation. Finally, there may be differences between Experiments. Design must account for all of these variables. We also remove low-count, noisy genes and reannotate data.
+Here we prepare DESeq object. We want to take into account KO factor but also activation/inhibition. Finally, there may be differences between Experiments. Design must account for all of these variables. We also remove low-count, noisy genes and reannotate data. We don't assume there are interaction factors.
 
 ```{r}
 dds_exp2 <- DESeqDataSet(expcounts, design = ~ Experiment + Knockout + Activation)
@@ -170,7 +170,7 @@ dds_exp2 <- DESeq(dds_exp2)
 
 # Regularized log transformation and visualization
 
-We need to perform regularized log transformation. This is used for purpose of visualization only and nothing else. Since this is done for purpose of publication, we use design-aware approach (as QC was done beforehand. At any rate, results are rather similar).
+We need to perform regularized log transformation. This is used for purpose of visualization only and nothing else. Since this is done for purpose of publication, we use design-aware approach (as QC was done beforehand; to reproduce replace blind = FALSE below with blind = TRUE. Here the results are mostly similar.).
 
 ```{r}
 rlog_exp2 <- rlog(dds_exp2, blind = FALSE)
@@ -206,6 +206,8 @@ tiff('Figures/exp2_PCA1_PCA2_all.tiff', units = 'in', width = 7.5, height = 5.5,
 print(pca1)
 dev.off()
 ```
+
+Plot PCA - 2nd and 3rd dimensions.
 
 ```{r}
 pca2 <- ggplot(pca_data, aes(x = PC2, y = PC3, color = Knockout, shape = Activation)) +
@@ -389,7 +391,7 @@ print(volplot1_blank)
 dev.off()
 ```
 
-We also extract results where we compare Activated and inhibited cells.
+We also extract results where we compare activated and inhibited cells.
 
 ```{r}
 res_exp2_act_vs_inh <- lfcShrink(dds = dds_exp2, contrast = c('Activation', 'Act', 'Act_and_p38i'), type = 'ashr')
@@ -405,12 +407,12 @@ colnames(contrast.tab2) <- paste0(colnames(contrast.tab2), '.GTKO.vs.WT')
 colnames(contrast.tab2inh) <- paste0(colnames(contrast.tab2inh), '.Act.vs.Inh') 
 norm.counts2 <- cbind(norm.counts2, contrast.tab2, contrast.tab2inh)
 write.csv(norm.counts2, 'Tables/Table_exp2_counts_contrast_GTKO_vs_WT_Act_vs_Inh_all.csv')
+write.csv(counts(dds_exp2, normalized=TRUE), 'Tables/Table_exp2_norm_counts.csv')
 ```
-
 
 # Expression using only activated cells
 
-Now we create object using only activated samples.
+Now we create object using only activated samples. We split data instead of just using constrast again to stey coherent with first experiment, with which the results of activated subset would be compared; therefore it is necessary to use same approach, even if in this case the separation of activated and inhibited samples smaller according to blinded PCA than in first experiment. However, this may be because sample 17 seems to be significant outlier.
 
 ```{r}
 dds_exp2_act <- DESeqDataSet(expcounts[,expcounts$Activation == 'Act'], design = ~ Experiment + Knockout)
@@ -425,13 +427,13 @@ Run DESeq itself.
 dds_exp2_act <- DESeq(dds_exp2_act)
 ```
 
-Extract Regularized log-normalized data.
+Extract Regularized log-normalized data for activated samples only.
 
 ```{r}
 rlog_exp2_act <- rlog(dds_exp2_act, blind = FALSE)
 ```
 
-We can now plot PCA. At first we need to extract it then plot it. We plot design-aware variant (required for publications).
+We can now plot PCA. At first we need to extract it then plot it. We plot design-aware variant (for publications).
 
 ```{r}
 pca_data_cmp <- get.complete.PCA.data(rlog_exp2_act)
@@ -440,6 +442,8 @@ pca_data <- pca_data_cmp$x %>% as.data.frame %>% cbind(., sample_tab[sample_tab$
 # get fraction of variability captured by each PC
 pca_Var <- pca_data_cmp$sdev^2/sum(pca_data_cmp$sdev^2)
 ```
+
+Plot PCA of activated samples only (default).
 
 ```{r}
 pca1 <- ggplot(pca_data, aes(x = PC1, y = PC2, color = Knockout)) +
@@ -458,13 +462,13 @@ print(pca1)
 
 # Getting results for activated data only
 
-We now get Differentially expressed genes for cells from activated mice only.
+We now get differentially expressed genes for cells from activated mice only.
 
 ```{r}
 res_exp2_act <- lfcShrink(dds = dds_exp2_act, contrast = c('Knockout', 'GTKO', 'WT'), type = 'ashr')
 ```
 
-We now plot volcano plot for activated data only.
+We now plot volcano plot for activated cells only.
 
 ```{r}
 tmp.tab <- res_exp2_act %>% as.data.frame %>% 
@@ -572,7 +576,7 @@ print(volplot1_act_blank)
 dev.off()
 ```
 
-Prepare and generate count table with normalized counts GTKO vs. WT.
+Prepare and generate count table with normalized counts (GTKO vs. WT).
 
 ```{r}
 norm.counts.act2 <- counts(dds_exp2_act, normalized=TRUE)
@@ -584,7 +588,7 @@ write.csv(norm.counts.act2, 'Tables/Table_exp2_counts_contrast_GTKO_vs_WT_only_a
 
 # Getting results for inhibited data only
 
-Now we create object using only activated samples.
+Now we create object using only inhibited samples, the reasoning is the same as above.
 
 ```{r}
 dds_exp2_inh <- DESeqDataSet(expcounts[,expcounts$Activation != 'Act'], design = ~ Experiment + Knockout)
@@ -599,19 +603,19 @@ Run DESeq itself.
 dds_exp2_inh <- DESeq(dds_exp2_inh)
 ```
 
-Extract Regularized log-normalized data.
+Extract regularized log-normalized data.
 
 ```{r}
 rlog_exp2_inh <- rlog(dds_exp2_inh, blind = FALSE)
 ```
 
-We now get Differentially expressed genes for cells for non-activated mice only.
+We now get differentially expressed genes for cells for inhibited cells only.
 
 ```{r}
 res_exp2_inh <- lfcShrink(dds = dds_exp2_inh, contrast = c('Knockout', 'GTKO', 'WT'), type = 'ashr')
 ```
 
-We now plot volcano plot for activated data only.
+We now plot volcano plot for inhibited data only.
 
 ```{r}
 tmp.tab <- res_exp2_inh %>% as.data.frame %>% 
@@ -731,7 +735,7 @@ write.csv(norm.counts.inh2, 'Tables/Table_exp2_counts_contrast_GTKO_vs_WT_only_i
 
 # Expression using WT samples only
 
-Now we create object using only WT samples.
+Now we create object using only WT samples. We split data instead of using just contrast to keep the methodology same through two experiments.
 
 ```{r}
 dds_exp2_WT <- DESeqDataSet(expcounts[,expcounts$Knockout == 'WT'], design = ~ Experiment + Activation)
@@ -752,7 +756,7 @@ R-log normalize.
 rlog_exp2_WT <- rlog(dds_exp2_WT, blind = FALSE)
 ```
 
-Generate result for desired contrast (lfc-shrunk).
+Generate result for desired contrast for WT data (lfc-shrunk).
 
 ```{r}
 res_exp2_WT <- lfcShrink(dds = dds_exp2_WT, contrast = c('Activation', 'Act', 'Act_and_p38i'), type = 'ashr')
@@ -811,7 +815,7 @@ print(volplot3)
 dev.off()
 ```
 
-Make zoom of central part.
+Make zoom of central part to see where some of genes of interest are located. This will be not used in publication.
 
 ```{r}
 xlim.a <- 1
@@ -894,7 +898,7 @@ print(volplot3_blank)
 dev.off()
 ```
 
-Prepare and generate count table with normalized counts Activated vs. Inhibited.
+Prepare and generate count table with normalized counts (Activated vs. Inhibited for WT mice).
 
 ```{r}
 norm.counts.wt2 <- counts(dds_exp2_WT, normalized=TRUE)
@@ -906,7 +910,7 @@ write.csv(norm.counts.wt2, 'Tables/Table_exp2_counts_contrast_Act_vs_Inh_only_WT
 
 # Expression using GTKO samples only
 
-Now we create object using only WT samples.
+Now we create object using only GTKO samples. Reasoning for split instead of contrast is the same as above.
 
 ```{r}
 dds_exp2_GTKO <- DESeqDataSet(expcounts[,expcounts$Knockout == 'GTKO'], design = ~ Experiment + Activation)
@@ -1069,7 +1073,7 @@ print(volplot4_blank)
 dev.off()
 ```
 
-Prepare and generate count table with normalized counts Activated vs. Inhibited.
+Prepare and generate count table with normalized counts (Activated vs. Inhibited, GTKO mice only).
 
 ```{r}
 norm.counts.gtko2 <- counts(dds_exp2_GTKO, normalized=TRUE)
@@ -1119,7 +1123,7 @@ Make heatmap of desired genes.
 vis_genes <- c('Ifng', 'Gzmb', 'Prf1', 'Casp1', 'Casp4', 'Serpina3f', 'Serpina3g', 'Tnfrsf4', 'Eomes', 'Ccl1', 'Ccl9', 'Il17a', 'Il17f', 'Il23r', 'Rorc')
 ```
 
-Make heatmap of top 20 differentially expressed genes.
+Make heatmap of genes of interest.
 
 ```{r}
 colfunc <- colorRampPalette(c(col_WT, "gray90", col_GTKO))
