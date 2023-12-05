@@ -5,6 +5,8 @@ date: "2023-07-19"
 output: html_document
 ---
 
+LICENCE: MIT (see LICENCE.md)
+
 Analysis of second experiment from Bulk data (GTKO vs. WT mice - activated and activated + inhibited).
 
 # Setup

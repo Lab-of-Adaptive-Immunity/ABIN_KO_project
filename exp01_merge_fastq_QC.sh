@@ -1,3 +1,6 @@
+# Author: Juraj Michalik, Lab of Adaptive Immunity, Institute of Molecular Genetics of the Czech Academy of Sciences
+# LICENCE: MIT (see LICENCE.md)
+
 mkdir Fastqs_merged1
 cat Fastqs/GTKO_1ku1_B26_6* > Fastqs_merged1/GTKO_1ku1_B26-6.fastq.gz
 cat Fastqs/GTKO_1ku1_B26_7* > Fastqs_merged1/GTKO_1ku1_B26-7.fastq.gz

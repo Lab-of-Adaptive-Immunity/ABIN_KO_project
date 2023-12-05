@@ -1,3 +1,6 @@
+# Author: Juraj Michalik, Lab of Adaptive Immunity, Institute of Molecular Genetics of the Czech Academy of Sciences
+# LICENCE: MIT (see LICENCE.md)
+
 mkdir STAR2 
 mkdir STAR2/A1WT1ku1_activated_B26_17
 mkdir STAR2/A2WT1ku1_activated_B26_18

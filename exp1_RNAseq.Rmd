@@ -5,6 +5,8 @@ date: "2023-07-19"
 output: html_document
 ---
 
+LICENCE: MIT (see LICENCE.md)
+
 Analysis of first experiment from Bulk data (GTKO vs. WT mice - activated or no).
 
 # Setup
@@ -633,7 +635,7 @@ Prepare and generate count table with normalized counts and fold changes.
 ```{r}
 norm.counts.act1 <- counts(dds_exp1_act, normalized=TRUE)
 contrast.tab.act1 <- res_exp1_act[,c('log2FoldChange', 'pvalue', 'padj')]
-colnames(contrast.tab.act1) <- paste0(colnames(contrast.tab.act1), '.GTKO.vs.WT') 
+colnames(contrast.tab.act1) <- paste0(colnames(contrast.tab.act1), '.GTKO.vs.WT.activated') 
 norm.counts.act1 <- cbind(norm.counts.act1, contrast.tab.act1)
 write.csv(norm.counts.act1, 'Tables/Table_exp1_counts_contrast_GTKO_vs_WT_only_activated.csv')
 ```

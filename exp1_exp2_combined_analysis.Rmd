@@ -5,6 +5,8 @@ date: "2023-05-10"
 output: rmdformats::material
 ---
 
+LICENCE: MIT (see LICENCE.md)
+
 Performing some supplementary data analysis using bulk RNA seq data involving both first and second experiment.
 
 # Setup
