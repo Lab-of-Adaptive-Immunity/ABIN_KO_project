@@ -25,6 +25,7 @@ library(pheatmap)
 library(RColorBrewer)
 library(gplots)
 library(dplyr)
+library(tibble)
 library(ggrepel)
 library(Rsubread)
 
@@ -895,4 +896,6 @@ saveRDS(res_exp1_non_act, 'Rds_data/exp1_res_KO_vs_WT_non_act_only.rds')
 saveRDS(dds_exp1, 'Rds_data/exp1_DESeq_all.rds')
 saveRDS(dds_exp1_act, 'Rds_data/exp1_DESeq_act_only.rds')
 saveRDS(dds_exp1_non_act, 'Rds_data/exp1_DESeq_non_act_only.rds')
+
+saveRDS(expcounts, 'Rds_data/exp1_counts.rds')
 ```

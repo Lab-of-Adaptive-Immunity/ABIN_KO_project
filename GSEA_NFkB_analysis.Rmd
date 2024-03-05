@@ -1,0 +1,988 @@
+---
+title: "GSE analysis based on list of genes directly regulated by NF-kB"
+author: "Juraj Michalik"
+date: "2023-12-08"
+output: html_document
+---
+
+LICENCE: MIT (see LICENCE.md)
+
+Supplementary analysis using data (notably NF-kB target genes) from this paper: https://www.nature.com/articles/s41590-023-01561-7#Sec28
+
+# Setup
+
+Load required packages.
+
+```{r, include = F}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(DESeq2)
+library(dplyr)
+library(tibble)
+library(ggrepel)
+library(magrittr)
+library(clusterProfiler)
+library(fgsea)
+library(pheatmap)
+library(dichromat)
+library(limma)
+library(DT)
+
+# annotation libs
+library(AnnotationHub)
+
+dir.create(file.path('GSEA_tables/'), showWarnings = F)
+
+col_WT <- '#55a0fbff'
+col_GTKO <- '#c000c0ff'
+```
+
+Function for reannotation and PCA.
+
+```{r}
+# Get current Mus Musculus database from AnnotationHub if not downloaded already
+getEnsMm106 <- function(){
+  aHu <- AnnotationHub()
+  aHuQuery <- query(aHu, pattern = c("Mus Musculus", "EnsDb", '106'))
+  EnsMm106 <- aHuQuery[[1]]
+  return(EnsMm106)
+}
+
+# adds annotation to object
+reannotate <- function(dds.obj, keyslist = row.names(dds.obj)){
+  EnsMm106 <- getEnsMm106()
+  symbol.vector <- mapIds(EnsMm106,
+                          keys = row.names(dds.obj),
+                          column = "SYMBOL",
+                          keytype = "GENEID",
+                          multiVals = "first")
+  # rename only if symbol is a thing
+  row.names(dds.obj) <- ifelse(is.na(symbol.vector) | symbol.vector == '', row.names(dds.obj), symbol.vector)
+  return(dds.obj)    
+}
+
+
+# returns PCA data with more PCs (12 I think)
+get.complete.PCA.data <- function(dds.obj, ntop = 500){
+	rvar <- rowVars(assay(dds.obj))
+	select <- order(rvar, decreasing=TRUE)[seq_len(min(ntop, length(rvar)))]
+	pca.dat <- prcomp(t(assay(dds.obj)[select,]))
+	return(pca.dat)
+}
+```
+
+# GSEA tests
+
+Here we will perform GSEA analysis on set of genes that are target for NFkB from the paper above. For this purpose we load required genes first.
+
+```{r}
+NFkB_target_genes_I1 <- read.csv('Paper_I1_cluster.csv', h=T)[,1]
+
+NFkB_target_genes_I2 <- read.csv('Paper_I2_cluster.csv', h=T)[,1]
+
+NFkB_target_genes_I3 <- read.csv('Paper_I3_cluster.csv', h=T)[,1]
+
+NFkB_target_genes_I6 <- read.csv('Paper_I6_cluster.csv', h=T)[,1]
+
+NFkB_target_genes <- list(NFkB_target_genes_I1, NFkB_target_genes_I2, NFkB_target_genes_I3, NFkB_target_genes_I6)
+names(NFkB_target_genes) <- c('I1', 'I2', 'I3', 'I6')
+```
+
+First we need to calculate contrast for exp1 between activated and non-activated cells because we don't have that from previous case. We therefore load counts and create new DESeq2 object.
+
+```{r}
+expcounts_1 <- readRDS('Rds_data/exp1_counts.rds')
+expcounts_1$Activation.bin <- ifelse(expcounts_1$Activation == 'non-act', 'non-act', 'act')
+
+dds_exp1_alt <- DESeqDataSet(expcounts_1, design = ~ Experiment + Activation.bin + Knockout)
+rowData(dds_exp1_alt)$EnsemblID <- rownames(expcounts_1)
+dds_exp1_alt <- dds_exp1_alt[rowSums(counts(dds_exp1_alt)) > 10, ] # remove <= 10 counts = noise
+dds_exp1_alt <- reannotate(dds_exp1_alt)
+```
+
+Run DESeq.
+
+```{r}
+dds_exp1_alt <- DESeq(dds_exp1_alt)
+```
+
+Run DESeq, then get results for 'activated' vs. 'non-activated contrast'.
+
+```{r}
+res_exp1_act_vs_non_act <- lfcShrink(dds = dds_exp1_alt, contrast = c('Activation.bin', 'act', 'non-act'), type = 'ashr')
+```
+
+Now load previously completed results.
+
+```{r}
+res_exp1_act_KO_vs_WT <- readRDS('Rds_data/exp1_res_KO_vs_WT_act_only.rds')
+res2_act_exp2_act_KO_vs_WT <- readRDS('Rds_data/exp2_res_KO_vs_WT_act_only.rds')
+```
+
+Make ranked list for each.
+
+```{r}
+ranked_exp1_all <- res_exp1_act_vs_non_act$log2FoldChange
+names(ranked_exp1_all) <- rownames(res_exp1_act_vs_non_act)
+
+ranked_exp1_act <- res_exp1_act_KO_vs_WT$log2FoldChange
+names(ranked_exp1_act) <- rownames(res_exp1_act_KO_vs_WT)
+
+ranked_exp2_act <- res2_act_exp2_act_KO_vs_WT$log2FoldChange
+names(ranked_exp2_act) <- rownames(res2_act_exp2_act_KO_vs_WT)
+```
+
+Now do GSEA.
+
+```{r, include = F}
+set.seed(42)
+fgsea_exp1_all <- fgsea(pathways = NFkB_target_genes,
+                        stats = ranked_exp1_all,
+                        nperm=500000)
+
+fgsea_exp1_act <- fgsea(pathways = NFkB_target_genes,
+                        stats = ranked_exp1_act,
+                        nperm=500000)
+
+fgsea_exp2_act <- fgsea(pathways = NFkB_target_genes,
+                        stats = ranked_exp2_act,
+                        nperm=500000)
+```
+
+Plot all for cluster I3 first.
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I3']], ranked_exp1_all)$data
+
+xcoord <- max(GSE_data$x) * 0.55
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.9 + min(GSE_data$y)
+ycoord2 <- yrange * 0.8 + min(GSE_data$y)
+ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
+  
+GSEA_nfkb_1_I3 <- plotEnrichment(NFkB_target_genes[['I3']],
+               ranked_exp1_all) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp1_all$padj[3], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp1_all$NES[3], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ',fgsea_exp1_all$size[3]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I3 cluster (direct target of NF-kB)\n for contrast of Activated vs. Non-Activated - Mice (Exp1, all)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_1_I3)
+```
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I3']], ranked_exp1_act)$data
+
+xcoord <- max(GSE_data$x) * 0.55
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.9 + min(GSE_data$y)
+ycoord2 <- yrange * 0.8 + min(GSE_data$y)
+ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
+  
+GSEA_nfkb_2_I3 <- plotEnrichment(NFkB_target_genes[['I3']],
+               ranked_exp1_act) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp1_act$padj[3], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp1_act$NES[3], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', fgsea_exp1_act$size[3]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I3 cluster (direct target of NF-kB)\n for contrast of GTKO vs. WT - Mice (Exp1, activ. only)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_2_I3)
+```
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I3']], ranked_exp2_act)$data
+
+xcoord <- min(GSE_data$x) * 0.2
+yrange <- min(GSE_data$y) - max(GSE_data$y)
+ycoord1 <- yrange * 0.9 + max(GSE_data$y)
+ycoord2 <- yrange * 0.8 + max(GSE_data$y)
+ycoord3 <- yrange * 0.7 + max(GSE_data$y) 
+  
+GSEA_nfkb_3_I3 <- plotEnrichment(NFkB_target_genes[['I3']],
+               ranked_exp2_act) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp2_act$padj[3], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp2_act$NES[3], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', fgsea_exp2_act$size[3]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I3 cluster (direct target of NF-kB)\n for contrast of GTKO vs. WT - Mice (Exp2, activ. only)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_3_I3)
+```
+
+Save all of the above.
+
+```{r}
+tiff('Figures/NFkB_Figures/exp1_all_NFkB_I3_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_1_I3)
+dev.off()
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp1_act_NFkB_I3_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_2_I3)
+dev.off()
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp2_act_NFkB_I3_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_3_I3)
+dev.off()
+```
+
+Now do this for clusters I1, I2 and I6. I1 first.
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I1']], ranked_exp1_all)$data
+
+xcoord <- max(GSE_data$x) * 0.55
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.9 + min(GSE_data$y)
+ycoord2 <- yrange * 0.8 + min(GSE_data$y)
+ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
+  
+GSEA_nfkb_1_I1 <- plotEnrichment(NFkB_target_genes[['I1']],
+               ranked_exp1_all) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp1_all$padj[1], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp1_all$NES[1], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ',fgsea_exp1_all$size[1]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I1 cluster (direct target of NF-kB)\n for contrast of Activated vs. Non-Activated - Mice (Exp1, all)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_1_I1)
+```
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I1']], ranked_exp1_act)$data
+
+xcoord <- max(GSE_data$x) * 0.55
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.9 + min(GSE_data$y)
+ycoord2 <- yrange * 0.8 + min(GSE_data$y)
+ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
+  
+GSEA_nfkb_2_I1 <- plotEnrichment(NFkB_target_genes[['I1']],
+               ranked_exp1_act) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp1_act$padj[1], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp1_act$NES[1], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', fgsea_exp1_act$size[1]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I1 cluster (direct target of NF-kB)\n for contrast of GTKO vs. WT - Mice (Exp1, activ. only)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_2_I1)
+```
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I1']], ranked_exp2_act)$data
+
+xcoord <- max(GSE_data$x) * 0.55
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.9 + min(GSE_data$y)
+ycoord2 <- yrange * 0.8 + min(GSE_data$y)
+ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
+  
+GSEA_nfkb_3_I1 <- plotEnrichment(NFkB_target_genes[['I1']],
+               ranked_exp2_act) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp2_act$padj[1], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp2_act$NES[1], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', fgsea_exp2_act$size[1]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I1 cluster (direct target of NF-kB)\n for contrast of GTKO vs. WT - Mice (Exp2, activ. only)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_3_I1)
+```
+
+Save all of the above.
+
+```{r}
+tiff('Figures/NFkB_Figures/exp1_all_NFkB_I1_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_1_I1)
+dev.off()
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp1_act_NFkB_I1_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_2_I1)
+dev.off()
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp2_act_NFkB_I1_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_3_I1)
+dev.off()
+```
+
+Cluster I2.
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I2']], ranked_exp1_all)$data
+
+xcoord <- max(GSE_data$x) * 0.55
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.9 + min(GSE_data$y)
+ycoord2 <- yrange * 0.8 + min(GSE_data$y)
+ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
+  
+GSEA_nfkb_1_I2 <- plotEnrichment(NFkB_target_genes[['I2']],
+               ranked_exp1_all) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp1_all$padj[2], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp1_all$NES[2], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ',fgsea_exp1_all$size[2]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I2 cluster (direct target of NF-kB)\n for contrast of Activated vs. Non-Activated - Mice (Exp1, all)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_1_I2)
+```
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I2']], ranked_exp1_act)$data
+
+xcoord <- max(GSE_data$x) * 0.55
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.9 + min(GSE_data$y)
+ycoord2 <- yrange * 0.8 + min(GSE_data$y)
+ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
+  
+GSEA_nfkb_2_I2 <- plotEnrichment(NFkB_target_genes[['I2']],
+               ranked_exp1_act) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp1_act$padj[2], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp1_act$NES[2], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', fgsea_exp1_act$size[2]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I2 cluster (direct target of NF-kB)\n for contrast of GTKO vs. WT - Mice (Exp1, activ. only)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_2_I2)
+```
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I2']], ranked_exp2_act)$data
+
+xcoord <- max(GSE_data$x) * 0.55
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.9 + min(GSE_data$y)
+ycoord2 <- yrange * 0.8 + min(GSE_data$y)
+ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
+  
+GSEA_nfkb_3_I2 <- plotEnrichment(NFkB_target_genes[['I2']],
+               ranked_exp2_act) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp2_act$padj[2], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp2_act$NES[2], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', fgsea_exp2_act$size[2]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I2 cluster (direct target of NF-kB)\n for contrast of GTKO vs. WT - Mice (Exp2, activ. only)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_3_I2)
+```
+
+Save all of the above.
+
+```{r}
+tiff('Figures/NFkB_Figures/exp1_all_NFkB_I2_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_1_I2)
+dev.off()
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp1_act_NFkB_I2_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_2_I2)
+dev.off()
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp2_act_NFkB_I2_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_3_I2)
+dev.off()
+```
+
+Cluster I6.
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I6']], ranked_exp1_all)$data
+
+xcoord <- max(GSE_data$x) * 0.55
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.9 + min(GSE_data$y)
+ycoord2 <- yrange * 0.8 + min(GSE_data$y)
+ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
+  
+GSEA_nfkb_1_I6 <- plotEnrichment(NFkB_target_genes[['I6']],
+               ranked_exp1_all) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp1_all$padj[4], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp1_all$NES[4], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ',fgsea_exp1_all$size[4]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I6 cluster (direct target of NF-kB)\n for contrast of Activated vs. Non-Activated - Mice (Exp1, all)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_1_I6)
+```
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I6']], ranked_exp1_act)$data
+
+xcoord <- max(GSE_data$x) * 0.55
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.9 + min(GSE_data$y)
+ycoord2 <- yrange * 0.8 + min(GSE_data$y)
+ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
+  
+GSEA_nfkb_2_I6 <- plotEnrichment(NFkB_target_genes[['I6']],
+               ranked_exp1_act) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp1_act$padj[4], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp1_act$NES[4], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', fgsea_exp1_act$size[4]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I6 cluster (direct target of NF-kB)\n for contrast of GTKO vs. WT - Mice (Exp1, activ. only)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_2_I6)
+```
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I6']], ranked_exp2_act)$data
+
+xcoord <- max(GSE_data$x) * 0.55
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.9 + min(GSE_data$y)
+ycoord2 <- yrange * 0.8 + min(GSE_data$y)
+ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
+  
+GSEA_nfkb_3_I6 <- plotEnrichment(NFkB_target_genes[['I6']],
+               ranked_exp2_act) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp2_act$padj[4], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp2_act$NES[4], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', fgsea_exp2_act$size[4]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I6 cluster (direct target of NF-kB)\n for contrast of GTKO vs. WT - Mice (Exp2, activ. only)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_3_I6)
+```
+
+Save all of the above.
+
+```{r}
+tiff('Figures/NFkB_Figures/exp1_all_NFkB_I6_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_1_I6)
+dev.off()
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp1_act_NFkB_I6_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_2_I6)
+dev.off()
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp2_act_NFkB_I6_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_3_I6)
+dev.off()
+```
+
+# Just WT from first case
+
+Make deseq with WT only.
+
+```{r}
+expcounts_1 <- readRDS('Rds_data/exp1_counts.rds')
+expcounts_1$Activation.bin <- ifelse(expcounts_1$Activation == 'non-act', 'non-act', 'act')
+
+dds_exp1_WT <- DESeqDataSet(expcounts_1[,expcounts_1$Knockout == 'WT'], design = ~ Experiment + Activation.bin)
+rowData(dds_exp1_WT)$EnsemblID <- rownames(expcounts_1[,expcounts_1$Knockout == 'WT'])
+dds_exp1_WT <- dds_exp1_WT[rowSums(counts(dds_exp1_WT)) > 10, ] # remove <= 10 counts = noise
+dds_exp1_WT <- reannotate(dds_exp1_WT)
+```
+
+Run DESeq.
+
+```{r}
+dds_exp1_WT <- DESeq(dds_exp1_WT)
+```
+
+Run DESeq, then get results for 'activated' vs. 'non-activated contrast'.
+
+```{r}
+res_exp1_WT_act_vs_non_act <- lfcShrink(dds = dds_exp1_WT, contrast = c('Activation.bin', 'act', 'non-act'), type = 'ashr')
+```
+
+Make ranked list.
+
+```{r}
+ranked_exp1_WT <- res_exp1_WT_act_vs_non_act$log2FoldChange
+names(ranked_exp1_WT) <- rownames(res_exp1_WT_act_vs_non_act)
+```
+
+Now do GSEA.
+
+```{r, include = F}
+set.seed(42)
+fgsea_exp1_WT <- fgsea(pathways = NFkB_target_genes,
+                       stats = ranked_exp1_WT,
+                       nperm=500000)
+```
+
+Plot all.
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I3']], ranked_exp1_WT)$data
+
+xcoord <- max(GSE_data$x) * 0.55
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.9 + min(GSE_data$y)
+ycoord2 <- yrange * 0.8 + min(GSE_data$y)
+ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
+  
+GSEA_nfkb_4 <- plotEnrichment(NFkB_target_genes[['I3']],
+               ranked_exp1_WT) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp1_WT$padj[3], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp1_WT$NES[3], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', fgsea_exp1_WT$size[3]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I3 cluster (direct target of NF-kB)\n for contrast of Activated vs. Non-Activated - Mice (Exp1, WT only)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_4)
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp1_WT_NFkB_I3_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_4)
+dev.off()
+```
+
+# Scatter plot of combined sets
+
+Here we combine data from results from exp1 - activated and exp2 - activated based on symbols.
+
+```{r}
+res_exp2_act <- readRDS('Rds_data/exp2_res_KO_vs_WT_act_only.rds')
+```
+
+```{r}
+combined_data <- as.data.frame(res_exp1_act_KO_vs_WT) %>% rownames_to_column('symbol') %>%
+  dplyr::inner_join(as.data.frame(res_exp2_act) %>% rownames_to_column('symbol'), by = c('symbol' = 'symbol'), suffix = c(".exp1", ".exp2"))
+
+combined_data <- combined_data %>% dplyr::filter(symbol %in% NFkB_target_genes[['I3']])
+```
+
+Plot scatter.
+
+```{r}
+pp <- nrow(combined_data[combined_data$log2FoldChange.exp1 > 0 & combined_data$log2FoldChange.exp2 > 0,])
+pn <- nrow(combined_data[combined_data$log2FoldChange.exp1 > 0 & combined_data$log2FoldChange.exp2 <= 0,])
+nn <- nrow(combined_data[combined_data$log2FoldChange.exp1 <= 0 & combined_data$log2FoldChange.exp2 <= 0,])
+np <- nrow(combined_data[combined_data$log2FoldChange.exp1 <= 0 & combined_data$log2FoldChange.exp2 > 0,])
+```
+
+```{r}
+scatter_plot_combin <- ggplot(combined_data, aes(x = log2FoldChange.exp1, y = log2FoldChange.exp2, label = symbol)) +
+  geom_point(col = 'red') + 
+  geom_text_repel(max.overlaps = 5, seed = 10) +
+  geom_hline(yintercept = 0, linetype = 'dashed') +
+  geom_vline(xintercept = 0, linetype = 'dashed') +
+  theme_classic() +
+  xlab('L2FC (GTKO vs. WT) - Exp1 act.') +
+  ylab('L2FC (GTKO vs. WT) - Exp2 act.') +
+  annotate('text', x = 0.3, y = -0.5, label = paste0('L2FC.exp1>0, L2FC.exp2>0: ', pp, 
+                                                    '\nL2FC.exp1>0, L2FC.exp2<=0: ', pn,
+                                                    '\nL2FC.exp1<=0, L2FC.exp2<=0: ', nn,
+                                                    '\nL2FC.exp1<=0, L2FC.exp2>0: ', np), hjust = 0, col = 'red') +
+  ggtitle('Comparison between L2FC values between GTKO and WT mice expression\n between Exp1 and Exp2 (act. cells only for both)')
+print(scatter_plot_combin)
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp1_exp2_act_scatter_GTKO_vs_WT_NFkB.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(scatter_plot_combin)
+dev.off()
+```
+
+# GSEA between activated and inhibited cells of exp2
+
+Here we load data from exp2 that compare activated and inhibited cells.
+
+```{r}
+dds_exp2 <- readRDS('Rds_data/exp2_DESeq_all.rds')
+res_exp2_act_vs_inh <- readRDS('Rds_data/exp2_res_Act_vs_Inh.rds')
+```
+
+Make ranked list for each.
+
+```{r}
+ranked_exp2_all <- res_exp2_act_vs_inh$log2FoldChange
+names(ranked_exp2_all) <- rownames(res_exp2_act_vs_inh)
+```
+
+Now do GSEA.
+
+```{r, include = F}
+set.seed(42)
+fgsea_exp2_all <- fgsea(pathways = NFkB_target_genes,
+                        stats = ranked_exp2_all,
+                        nperm=500000)
+```
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I3']], ranked_exp2_all)$data
+
+xcoord <- max(GSE_data$x) * 0.55
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.9 + min(GSE_data$y)
+ycoord2 <- yrange * 0.8 + min(GSE_data$y)
+ycoord3 <- yrange * 0.7 + min(GSE_data$y) 
+  
+GSEA_nfkb_5 <- plotEnrichment(NFkB_target_genes[['I3']],
+               ranked_exp2_all) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp2_all$padj[3], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp2_all$NES[3], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', fgsea_exp2_all$size[3]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I3 cluster (direct target of NF-kB)\n for contrast of Activated vs. P38 Inhibited - Mice (Exp2, all)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_5)
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp2_all_NFkB_I3_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_5)
+dev.off()
+```
+
+Heatmap of exp2.
+
+```{r}
+rlog_exp2 <- readRDS('Rds_data/exp2_rlog.rds')
+```
+
+```{r}
+colfunc <- colorRampPalette(c('steelblue', "gray90", 'firebrick'))
+vis_genes <- intersect(NFkB_target_genes[['I3']], rownames(rlog_exp2))
+vis_genes_tab <- limma::removeBatchEffect(assay(rlog_exp2)[vis_genes,], colData(rlog_exp2)$Experiment)
+
+tiff('Figures/NFkB_Figures/exp2_heatmap_NF-kB.tiff', units = 'in', width = 6.5, height = 15.5, res = 150)
+
+pheatmap(vis_genes_tab, border = 'NA', scale = 'row', color=colfunc(64), cluster_rows = T,
+         annotation_col = as.data.frame(colData(dds_exp2)[c('Activation', 'Knockout')]), cluster_cols = F,
+         main='Heatmap of NF-kB target genes between GTKO \n and WT, Activated and Inhibited mice (Exp2)', cex = 1,
+         annotation_colors = list(Knockout = c(GTKO = col_GTKO, WT = col_WT), Activation = c(Act = 'green2', Act_and_p38i = 'orange')))
+
+dev.off()
+```
+
+# Combined analysis for activated cells from exp1 and exp2 activated cells only
+
+Load counts from both tables.
+
+```{r}
+count_table_1 <- readRDS('Rds_data/exp1_counts.rds')
+count_table_2 <- readRDS('Rds_data/exp2_counts.rds')
+
+dds_exp1 <- readRDS('Rds_data/exp1_DESeq_all.rds')
+dds_exp2 <- readRDS('Rds_data/exp2_DESeq_all.rds')
+
+colData_exp1 <- colData(dds_exp1)
+colData_exp2 <- colData(dds_exp2)
+```
+
+Combine coldata and counts, then add number of experiment.
+
+```{r}
+count_table_bound <- cbind(assay(count_table_1), assay(count_table_2))
+
+colData_exp1$Experiment <- paste(colData_exp1$Experiment, 1, sep = '_')
+colData_exp2$Experiment <- paste(colData_exp2$Experiment, 2, sep = '_')
+
+colData_exp1$Batch <- '1'
+colData_exp2$Batch <- '2'
+  
+colData_bound <- rbind(colData_exp1, colData_exp2)
+colData_bound <- colData_bound %>% as.data.frame %>% dplyr::select(-sizeFactor)
+```
+
+Filter to only activated data sets.
+
+```{r}
+count_table_bound <- count_table_bound[,!(colData_bound$Activation %in% c('non-act', 'Act_and_p38i'))]
+colData_bound <- colData_bound[!(colData_bound$Activation %in% c('non-act', 'Act_and_p38i')),]
+```
+
+Create DESeq data set.
+
+```{r}
+dds_act_merged <- DESeqDataSetFromMatrix(countData = count_table_bound,
+                                         colData = colData_bound,
+                                         design = ~ Experiment + Knockout)
+
+rowData(dds_act_merged)$EnsemblID <- rownames(count_table_bound)
+dds_act_merged <- dds_act_merged[rowSums(counts(dds_act_merged)) > 10, ] # remove <= 10 counts = noise
+dds_act_merged <- reannotate(dds_act_merged)
+```
+
+Run DESeq itself.
+
+```{r}
+dds_act_merged <- DESeq(dds_act_merged)
+```
+Get r-log-normalized data.
+
+```{r}
+rlog_act_merged <- rlog(dds_act_merged, blind = FALSE)
+```
+
+Now we can make PCA. We plot PCA for 1-2 and 2-3 components. We include blank versions without text for easier manipulation.
+
+```{r}
+pca_data_cmp <- get.complete.PCA.data(rlog_act_merged)
+pca_data <- pca_data_cmp$x %>% as.data.frame %>% cbind(., colData(dds_act_merged))
+
+# get fraction of variability captured by each PC
+pca_Var <- pca_data_cmp$sdev^2/sum(pca_data_cmp$sdev^2)
+```
+
+```{r}
+pca1 <- ggplot(pca_data, aes(x = PC1, y = PC2, color = Knockout, shape = Batch)) +
+  geom_point(size = 5) +
+  geom_text_repel(aes(label = rownames(pca_data)), col='black', seed = 120) +
+  scale_color_manual(values = c(col_GTKO, col_WT)) +
+  ggtitle(paste0('exp1+exp2 merge - Normalized PCA (design-aware, PC1 + PC2)' )) +
+  xlab(paste0("PC1: ", round(pca_Var[1]*100), "% variance")) +
+  ylab(paste0("PC2: ", round(pca_Var[2]*100), "% variance")) +
+  theme_classic() +
+  theme(panel.grid.major = element_line(colour = "grey70", size = 0.3),
+        panel.grid.minor = element_line(colour = "grey70", size = 0.1))
+print(pca1)
+
+pca2 <- ggplot(pca_data, aes(x = PC2, y = PC3, color = Knockout, shape = Batch)) +
+  geom_point(size = 5) +
+  geom_text_repel(aes(label = rownames(pca_data)), col='black', seed = 120) +
+  scale_color_manual(values = c(col_GTKO, col_WT)) +
+  ggtitle(paste0('exp1+exp2 merge - Normalized PCA (design-aware, PC2 + PC3)' )) +
+  xlab(paste0("PC2: ", round(pca_Var[2]*100), "% variance")) +
+  ylab(paste0("PC3: ", round(pca_Var[3]*100), "% variance")) +
+  theme_classic() +
+  theme(panel.grid.major = element_line(colour = "grey70", size = 0.3),
+        panel.grid.minor = element_line(colour = "grey70", size = 0.1))
+print(pca2)
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp_merged_PCA1_PCA2.tiff', units = 'in', width = 7.5, height = 5.5, res = 150)
+print(pca1)
+dev.off()
+
+tiff('Figures/NFkB_Figures/exp_merged_PCA2_PCA3.tiff', units = 'in', width = 7.5, height = 5.5, res = 150)
+print(pca2)
+dev.off()
+```
+
+Get contrast GTKO vs. WT.
+
+```{r}
+res_exp_act_merged <- lfcShrink(dds = dds_act_merged, contrast = c('Knockout', 'GTKO', 'WT'), type = 'ashr')
+```
+
+Make ranked list from contrast.
+
+```{r}
+ranked_exp_merged_act <- res_exp_act_merged$log2FoldChange
+names(ranked_exp_merged_act) <- rownames(res_exp_act_merged)
+```
+
+Now do GSEA.
+
+```{r, include = F}
+set.seed(42)
+fgsea_exp_merged_act <- fgsea(pathways = NFkB_target_genes,
+                        stats = ranked_exp_merged_act,
+                        nperm=500000)
+```
+
+Plot GSEA for all clusters.
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I3']], ranked_exp_merged_act)$data
+
+xcoord <- max(GSE_data$x) * 0.15
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.4 + min(GSE_data$y)
+ycoord2 <- yrange * 0.3 + min(GSE_data$y)
+ycoord3 <- yrange * 0.2 + min(GSE_data$y) 
+  
+GSEA_nfkb_6_I3 <- plotEnrichment(NFkB_target_genes[['I3']],
+               ranked_exp_merged_act) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp_merged_act$padj[3], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp_merged_act$NES[3], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', fgsea_exp_merged_act$size[3]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I3 cluster (direct target of NF-kB)\n for contrast of GTKO vs. WT Mice (Exp1+Exp2, act)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_6_I3)
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp_merged_act_NFkB_I3_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_6_I3)
+dev.off()
+```
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I1']], ranked_exp_merged_act)$data
+
+xcoord <- max(GSE_data$x) * 0.15
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.4 + min(GSE_data$y)
+ycoord2 <- yrange * 0.3 + min(GSE_data$y)
+ycoord3 <- yrange * 0.2 + min(GSE_data$y) 
+  
+GSEA_nfkb_6_I1 <- plotEnrichment(NFkB_target_genes[['I1']],
+               ranked_exp_merged_act) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp_merged_act$padj[1], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp_merged_act$NES[1], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', fgsea_exp_merged_act$size[1]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I1 cluster (direct target of NF-kB)\n for contrast of GTKO vs. WT Mice (Exp1+Exp2, act)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_6_I1)
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp_merged_act_NFkB_I1_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_6_I1)
+dev.off()
+```
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I2']], ranked_exp_merged_act)$data
+
+xcoord <- max(GSE_data$x) * 0.15
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.4 + min(GSE_data$y)
+ycoord2 <- yrange * 0.3 + min(GSE_data$y)
+ycoord3 <- yrange * 0.2 + min(GSE_data$y) 
+  
+GSEA_nfkb_6_I2 <- plotEnrichment(NFkB_target_genes[['I2']],
+               ranked_exp_merged_act) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp_merged_act$padj[2], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp_merged_act$NES[2], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', fgsea_exp_merged_act$size[2]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I2 cluster (direct target of NF-kB)\n for contrast of GTKO vs. WT Mice (Exp1+Exp2, act)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_6_I2)
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp_merged_act_NFkB_I2_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_6_I2)
+dev.off()
+```
+
+```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
+
+GSE_data <- plotEnrichment(NFkB_target_genes[['I6']], ranked_exp_merged_act)$data
+
+xcoord <- max(GSE_data$x) * 0.15
+yrange <- max(GSE_data$y) - min(GSE_data$y)
+ycoord1 <- yrange * 0.4 + min(GSE_data$y)
+ycoord2 <- yrange * 0.3 + min(GSE_data$y)
+ycoord3 <- yrange * 0.2 + min(GSE_data$y) 
+  
+GSEA_nfkb_6_I6 <- plotEnrichment(NFkB_target_genes[['I6']],
+               ranked_exp_merged_act) + 
+  annotate("text", label = paste('padj = ', round(fgsea_exp_merged_act$padj[4], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
+  annotate("text", label = paste('NES = ', round(fgsea_exp_merged_act$NES[4], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
+  annotate("text", label = paste('Number of genes: ', fgsea_exp_merged_act$size[4]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  ggtitle('GSEA of gene set from I6 cluster (direct target of NF-kB)\n for contrast of GTKO vs. WT Mice (Exp1+Exp2, act)') +
+  theme_classic() + 
+  theme(plot.title = element_text(face="bold", hjust = 0.5))
+
+print(GSEA_nfkb_6_I6)
+```
+
+```{r}
+tiff('Figures/NFkB_Figures/exp_merged_act_NFkB_I6_GSEA.tiff', units = 'in', width = 7.5, height = 4.5, res = 150)
+print(GSEA_nfkb_6_I6)
+dev.off()
+```
+
+Make heatmap for combined data of select genes.
+  
+```{r, fig.width=8, fig.height=20}
+colfunc <- colorRampPalette(c('steelblue', "gray90", 'firebrick'))
+vis_genes <- intersect(NFkB_target_genes[['I3']], rownames(rlog_act_merged))
+vis_genes_tab <- limma::removeBatchEffect(assay(rlog_act_merged)[vis_genes,], colData(rlog_act_merged)$Experiment)
+vis_genes_tab <- vis_genes_tab[,c(1:6, 16:18, 7:15)]
+
+pheatmap(vis_genes_tab, border = 'NA', scale = 'row', color=colfunc(64), cluster_rows = T,
+         annotation_col = as.data.frame(colData(dds_act_merged)[c('Activation', 'Knockout', 'Batch')]), cluster_cols = F,
+         main='Heatmap of NF-kB target genes between GTKO \n and WT, Activated and Inhibited mice (Exp2)', cex = 1,
+         annotation_colors = list(Knockout = c(GTKO = col_GTKO, WT = col_WT)))
+```
+
+```{r, fig.width=8, fig.height=20}
+colfunc <- colorRampPalette(c('steelblue', "gray90", 'firebrick'))
+vis_genes <- intersect(NFkB_target_genes[['I1']], rownames(rlog_act_merged))
+vis_genes_tab <- limma::removeBatchEffect(assay(rlog_act_merged)[vis_genes,], colData(rlog_act_merged)$Experiment)
+vis_genes_tab <- vis_genes_tab[,c(1:6, 16:18, 7:15)]
+
+pheatmap(vis_genes_tab, border = 'NA', scale = 'row', color=colfunc(64), cluster_rows = T,
+         annotation_col = as.data.frame(colData(dds_act_merged)[c('Activation', 'Knockout', 'Batch')]), cluster_cols = F,
+         main='Heatmap of NF-kB target genes between GTKO \n and WT, Activated and Inhibited mice (Exp2)', cex = 1,
+         annotation_colors = list(Knockout = c(GTKO = col_GTKO, WT = col_WT)))
+```
+
+```{r, fig.width=8, fig.height=20}
+colfunc <- colorRampPalette(c('steelblue', "gray90", 'firebrick'))
+vis_genes <- intersect(NFkB_target_genes[['I2']], rownames(rlog_act_merged))
+vis_genes_tab <- limma::removeBatchEffect(assay(rlog_act_merged)[vis_genes,], colData(rlog_act_merged)$Experiment)
+vis_genes_tab <- vis_genes_tab[,c(1:6, 16:18, 7:15)]
+
+pheatmap(vis_genes_tab, border = 'NA', scale = 'row', color=colfunc(64), cluster_rows = T,
+         annotation_col = as.data.frame(colData(dds_act_merged)[c('Activation', 'Knockout', 'Batch')]), cluster_cols = F,
+         main='Heatmap of NF-kB target genes between GTKO \n and WT, Activated and Inhibited mice (Exp2)', cex = 1,
+         annotation_colors = list(Knockout = c(GTKO = col_GTKO, WT = col_WT)))
+```
+
+```{r, fig.width=8, fig.height=20}
+colfunc <- colorRampPalette(c('steelblue', "gray90", 'firebrick'))
+vis_genes <- intersect(NFkB_target_genes[['I6']], rownames(rlog_act_merged))
+vis_genes_tab <- limma::removeBatchEffect(assay(rlog_act_merged)[vis_genes,], colData(rlog_act_merged)$Experiment)
+vis_genes_tab <- vis_genes_tab[,c(1:6, 16:18, 7:15)]
+
+pheatmap(vis_genes_tab, border = 'NA', scale = 'row', color=colfunc(64), cluster_rows = T,
+         annotation_col = as.data.frame(colData(dds_act_merged)[c('Activation', 'Knockout', 'Batch')]), cluster_cols = F,
+         main='Heatmap of NF-kB target genes between GTKO \n and WT, Activated and Inhibited mice (Exp2)', cex = 1,
+         annotation_colors = list(Knockout = c(GTKO = col_GTKO, WT = col_WT)))
+```
+

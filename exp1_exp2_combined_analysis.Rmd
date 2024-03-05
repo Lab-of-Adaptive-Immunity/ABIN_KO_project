@@ -1,5 +1,5 @@
 ---
-title: "RNAseq Sarka II"
+title: "RNAseq - combined anlaysis of previously analyzed RNA seq experiments 1 and 2"
 author: "Juraj Michalik"
 date: "2023-05-10"
 output: rmdformats::material
@@ -7,7 +7,7 @@ output: rmdformats::material
 
 LICENCE: MIT (see LICENCE.md)
 
-Performing some supplementary data analysis using bulk RNA seq data involving both first and second experiment.
+Performing some supplementary data analysis using bulk RNA seq data involving both first and second experiment, notably GSEA of genes deemed activated in both experiments.
 
 # Setup
 
@@ -218,8 +218,8 @@ Now we select all genes that are up-regulated in both experiments for GTKO mice.
 
 ```{r}
 GSEA.genes <- list()
-GSEA.genes[['Activated_in_GTKO']] <- fc_upreg_set_exp1_exp2$EnsemblID
-GSEA.genes[['Deactivated_in_GTKO']] <- fc_downreg_set_exp1_exp2$EnsemblID
+GSEA.genes[['Activated_in_GTKO']] <- fc_upreg_set_exp1_exp2$symbol
+GSEA.genes[['Deactivated_in_GTKO']] <- fc_downreg_set_exp1_exp2$symbol
 ```
 
 Write lists to file along with their symbol.
@@ -248,7 +248,8 @@ Build ranked list for each.
 
 ```{r}
 ranked_all <- fold_change_bulk_exp2_p38i_all$log2FoldChange
-names(ranked_all) <- fold_change_bulk_exp2_p38i_all$EnsemblID
+names(ranked_all) <- rownames(fold_change_bulk_exp2_p38i_all)
+ranked_all <- sort(ranked_all, decreasing = T)
 ```
 
 Now do GSEA.
@@ -275,7 +276,7 @@ GSEA1_pos <- plotEnrichment(GSEA.genes[['Activated_in_GTKO']],
                ranked_all) + 
   annotate("text", label = paste('padj = ', round(fgsea_all$padj[1], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
   annotate("text", label = paste('NES = ', round(fgsea_all$NES[1], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
-  annotate("text", label = paste('Number of genes: ', length(GSEA.genes[['Activated_in_GTKO']])), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  annotate("text", label = paste('Number of genes: ', fgsea_all$size[1]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
   ggtitle('GSEA of gene set of genes up-regulated in GTKO mice,\n for contrast of Activated vs. Inhibited Mice') +
   theme_classic() + 
   theme(plot.title = element_text(face="bold", hjust = 0.5))
@@ -288,6 +289,7 @@ tiff('Figures/exp1_exp2_GSEA_upreg.tiff', units = 'in', width = 7.5, height = 4.
 print(GSEA1_pos)
 dev.off()
 ```
+
 Plot variant without graphics.
 
 ```{r, fig.width = 9, fig.show= 'hold', fig.align = 'center'}
@@ -322,7 +324,7 @@ ycoord3 <- yrange * 0.7 + min(GSE_data$y)
 GSEA1_neg <- plotEnrichment(GSEA.genes[['Deactivated_in_GTKO']], ranked_all) + 
   annotate("text", label = paste('padj = ', round(fgsea_all$padj[2], 6)), x = xcoord, y = ycoord1, size = 7, hjust = 0, col = 'firebrick2') +
   annotate("text", label = paste('NES = ', round(fgsea_all$NES[2], 6)), x = xcoord, y = ycoord2, size = 7, hjust = 0, col = 'firebrick3') +
-  annotate("text", label = paste('Number of genes: ', length(GSEA.genes[['Deactivated_in_GTKO']])), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
+  annotate("text", label = paste('Number of genes: ', fgsea_all$size[2]), x = xcoord, y = ycoord3, size = 7, hjust = 0, col = 'firebrick4') +
   ggtitle('GSEA of gene set of genes down-regulated in GTKO mice,\n for contrast of Activated vs. Inhibited Mice') +
   theme_classic() + 
   theme(plot.title = element_text(face="bold", hjust = 0.5))
@@ -368,7 +370,7 @@ rld.file <- readRDS('Rds_data/exp2_rlog.rds')
 Now draw base heatmap, with clustering by columns and ordered by L2FC. We handle batch effect using limma. We also disable clustering by row.
 
 ```{r, fig.width=6, fig.height=14}
-All_ranked_up_by_exp2 <- fold_change_bulk_exp2_p38i_all %>% dplyr::filter(EnsemblID %in% GSEA.genes[['Activated_in_GTKO']]) %>% dplyr::arrange(-log2FoldChange)
+All_ranked_up_by_exp2 <- fold_change_bulk_exp2_p38i_all %>% dplyr::filter(rownames(.) %in% GSEA.genes[['Activated_in_GTKO']]) %>% dplyr::arrange(-log2FoldChange)
 
 tiff('Figures/exp2_GSEA_Select_heatmap.tiff', units = 'in', width = 4.5, height = 9.5, res = 150)
 
@@ -381,6 +383,7 @@ pheatmap(rld.batch, annotation_col=rld.meta, cluster_rows = F, cluster_cols = F,
 
 dev.off()
 ```
+
 Show above heatmap.
 
 ```{r, fig.width=8, fig.height=7}

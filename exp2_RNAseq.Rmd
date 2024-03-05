@@ -1113,8 +1113,11 @@ saveRDS(res_exp2_inh, 'Rds_data/exp2_res_KO_vs_WT_inh_only.rds')
 
 saveRDS(dds_exp2, 'Rds_data/exp2_DESeq_all.rds')
 saveRDS(dds_exp2_act, 'Rds_data/exp2_DESeq_act.rds')
+saveRDS(dds_exp2_inh, 'Rds_data/exp2_DESeq_inh.rds')
 saveRDS(dds_exp2_WT, 'Rds_data/exp2_DESeq_WT.rds')
 saveRDS(dds_exp2_GTKO, 'Rds_data/exp2_DESeq_GTKO.rds')
+
+saveRDS(expcounts, 'Rds_data/exp2_counts.rds')
 ```
 
 # Heatmap
