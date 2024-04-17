@@ -8,6 +8,8 @@ Link: Coming SOON!
 
 Data Accession: [GSE245397](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?&acc=GSE245397)
 
+The files Paper_I1_cluster.csv, Paper_I2_cluster.csv, Paper_I3_cluster.csv and Paper_I6_cluster.csv contain lists of genes that were obtained from paper of [Zhao *et al.* (2006)](https://www.nature.com/articles/s41590-023-01561-7).
+
 ## Running these scripts
 
 1. Clone this project. You'll end up with ABIN_KO_project directory.
@@ -21,12 +23,12 @@ Data Accession: [GSE245397](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?&acc=
 
 5. Return to ABIN_KO_project directory (cd ..) and successively run following files. This will merge fastq files from the same samples and then align them :
 
-* exp01_merge_fastq_QC.sh
-* exp01_run_STAR.sh
-* exp02_merge_fastq_QC.sh
-* exp02_run_STAR.sh
+* * exp01_merge_fastq_QC.sh
+* * exp01_run_STAR.sh
+* * exp02_merge_fastq_QC.sh
+* * exp02_run_STAR.sh
 
-6. The above should create bamfiles (directories Bamfiles1 and Bamfiles2) needed for analyses. The analyses are contained in files exp1_RNAseq.Rmd, exp2_RNAseq.Rmd and exp1_exp2_combined_analysis.Rmd.
+6. The above should create bamfiles (directories Bamfiles1 and Bamfiles2) needed for analyses. The analyses are contained in files exp1_RNAseq.Rmd, exp2_RNAseq.Rmd, exp1_exp2_combined_analysis.Rmd and GSEA_NFkB_analysis_finalized.Rmd. These analyses shoudl be run in this order, ideally in RStudio or another program allowing exectuion of Rmarkdown files.
 
-Now you should have files with complete analyses. Notably, tehre should be directories Figures, Rds_data, Tables and GSEA_tables that respectively contain figures, rds files with DESeq (result) objects, count tables and list of genes used for GSEA.
+Now you should have files with complete analyses. Notably, tehre should be directories Figures (including subdirectory NFkB_Figures_Finalized), Rds_data, Tables and GSEA_tables that respectively contain figures, rds files with DESeq (result) objects, count tables and list of genes used for GSEA.
 
