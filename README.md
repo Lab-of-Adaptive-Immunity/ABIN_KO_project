@@ -28,7 +28,7 @@ The files Paper_I1_cluster.csv, Paper_I2_cluster.csv, Paper_I3_cluster.csv and P
 * * exp02_merge_fastq_QC.sh
 * * exp02_run_STAR.sh
 
-6. The above should create bamfiles (directories Bamfiles1 and Bamfiles2) needed for analyses. The analyses are contained in files exp1_RNAseq.Rmd, exp2_RNAseq.Rmd, exp1_exp2_combined_analysis.Rmd and GSEA_NFkB_analysis_finalized.Rmd. These analyses shoudl be run in this order, ideally in RStudio or another program allowing exectuion of Rmarkdown files.
+6. The above should create bamfiles (directories Bamfiles1 and Bamfiles2) needed for analyses. The analyses are contained in files exp1_RNAseq.Rmd, exp2_RNAseq.Rmd, exp1_exp2_combined_analysis.Rmd and GSEA_NFkB_analysis_finalized.Rmd. These analyses need to be run in this order, ideally in RStudio or another program allowing exectuion of Rmarkdown files.
 
 Now you should have files with complete analyses. Notably, tehre should be directories Figures (including subdirectory NFkB_Figures_Finalized), Rds_data, Tables and GSEA_tables that respectively contain figures, rds files with DESeq (result) objects, count tables and list of genes used for GSEA.
 
