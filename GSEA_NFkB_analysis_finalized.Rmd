@@ -95,7 +95,7 @@ dir.create(file.path('Figures/NFkB_Figures_Finalized'), showWarnings = F)
 
 # Analysis
 
-First we need to calculate contrast for exp1 between activated and non-activated cells because we don't have that from previous case. We therefore load counts and create new DESeq2 object.
+First we need to calculate contrast for exp1 between activated and non-activated cells because we don't have that from previous case. We therefore load counts and create new DESeq2 object. We also use slightly different design where we unify 1ku1 and 4ku1 for 1/1 4/1 ratios of activation beads (which were previously defined as separate levels).
 
 ```{r}
 expcounts_1 <- readRDS('Rds_data/exp1_counts.rds')

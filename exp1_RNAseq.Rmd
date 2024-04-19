@@ -35,7 +35,7 @@ library(AnnotationHub)
 
 We also load some functions that will be needed later, notably regarding annotation.
 
-```{r cars}
+```{r}
 # Get current Mus Musculus database from AnnotationHub if not downloaded already
 getEnsMm106 <- function(){
   aHu <- AnnotationHub()
@@ -600,13 +600,14 @@ Make heatmap of genes we're interested in.
 
 ```{r}
 colfunc <- colorRampPalette(c(col_WT, "gray90", col_GTKO))
-vis_genes_tab <- limma::removeBatchEffect(assay(rlog_exp1_act)[vis_genes,], colData(rlog_exp1_act)$Experiment)
+vis_genes_tab <- limma::removeBatchEffect(assay(rlog_exp1_act), colData(rlog_exp1_act)$Experiment)
+vis_genes_tab <- vis_genes_tab[vis_genes,]
 vis_genes_tab <- vis_genes_tab[,c(7:12,1:6)]
 
 tiff('Figures/exp1_heatmap.tiff', units = 'in', width = 6.5, height = 7.5, res = 150)
 
 pheatmap(vis_genes_tab, border = 'NA', scale = 'row', color=colfunc(64), cluster_rows = F,
-         annotation_col = as.data.frame(colData(dds_exp1)[c('Knockout', 'Activation')]), cluster_cols = F,
+         annotation_col = as.data.frame(colData(dds_exp1_act)[c('Knockout', 'Activation')]), cluster_cols = F,
          main='Heatmap selected genes expressed\n genes between GTKO and WT mice (act. only)', cex = 1,
          annotation_colors = list(Knockout = c(GTKO = col_GTKO, WT = col_WT)))
 
@@ -616,10 +617,49 @@ Blank version.
 
 ```{r}
 colfunc <- colorRampPalette(c(col_WT, "gray90", col_GTKO))
-vis_genes_tab <- limma::removeBatchEffect(assay(rlog_exp1_act)[vis_genes,], colData(rlog_exp1_act)$Experiment)
+vis_genes_tab <- limma::removeBatchEffect(assay(rlog_exp1_act), colData(rlog_exp1_act)$Experiment)
+vis_genes_tab <- vis_genes_tab[vis_genes,]
 vis_genes_tab <- vis_genes_tab[,c(7:12,1:6)]
 
 tiff('Figures/exp1_heatmap_blank.tiff', units = 'in', width = 4.5, height = 5.9, res = 150)
+
+pheatmap(vis_genes_tab, border = 'NA', scale = 'row', color=colfunc(64), cluster_rows = F,
+         annotation_col = as.data.frame(colData(dds_exp1_act)[c('Knockout', 'Activation')]), cluster_cols = F,
+         main='', cex = 1, annotation_names_col = F, annotation_legend = F, legend = F,
+         labels_row = rep('', nrow(vis_genes_tab)),
+         labels_col = rep('', ncol(vis_genes_tab)),
+         annotation_colors = list(Knockout = c(GTKO = col_GTKO, WT = col_WT)))
+
+dev.off()
+```
+
+Same as previously, but for all samples.
+
+```{r}
+colfunc <- colorRampPalette(c(col_WT, "gray90", col_GTKO))
+vis_genes_tab <- limma::removeBatchEffect(assay(rlog_exp1), colData(rlog_exp1)$Experiment)
+vis_genes_tab <- vis_genes_tab[vis_genes,]
+vis_genes_tab <- vis_genes_tab[,c(16:18, 7:9, 10:15, 1:6)]
+
+tiff('Figures/exp1_heatmap_all.tiff', units = 'in', width = 7.5, height = 7.5, res = 150)
+
+pheatmap(vis_genes_tab, border = 'NA', scale = 'row', color=colfunc(64), cluster_rows = F,
+         annotation_col = as.data.frame(colData(dds_exp1)[c('Knockout', 'Activation')]), cluster_cols = F,
+         main='Heatmap selected genes expressed\n genes between GTKO and WT mice (act. only)', cex = 1,
+         annotation_colors = list(Knockout = c(GTKO = col_GTKO, WT = col_WT)))
+
+dev.off()
+```
+
+Blank version.
+
+```{r}
+colfunc <- colorRampPalette(c(col_WT, "gray90", col_GTKO))
+vis_genes_tab <- limma::removeBatchEffect(assay(rlog_exp1), colData(rlog_exp1)$Experiment)
+vis_genes_tab <- vis_genes_tab[vis_genes,]
+vis_genes_tab <- vis_genes_tab[,c(10:18,1:9)]
+
+tiff('Figures/exp1_heatmap_all_blank.tiff', units = 'in', width = 6.5, height = 5.9, res = 150)
 
 pheatmap(vis_genes_tab, border = 'NA', scale = 'row', color=colfunc(64), cluster_rows = F,
          annotation_col = as.data.frame(colData(dds_exp1)[c('Knockout', 'Activation')]), cluster_cols = F,
@@ -789,11 +829,11 @@ ylim.a <- max(tmp.tab$log) * 1.08
 diff.x.sig <- xlim.a - 1
 colPal <- c(col_WT, col_GTKO, 'gray50')
 names(colPal) <- c('p-adj < 0.05 and L2FC < -log2(1.5)', 'p-adj < 0.05 and L2FC > log2(1.5)', 'p-adj >= 0.05 or |L2FC| <= log2(1.5)')
-tmp.tab$symbols <- ifelse(rownames(tmp.tab) %in% c('Gzmb', 'Ifng', 'Casp1', 'Tnip1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4'), rownames(tmp.tab), '')
+tmp.tab$symbols <- ifelse(rownames(tmp.tab) %in% c('Gzmb', 'Ifng', 'Casp1', 'Tnip1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17a', 'Il17f', 'Prf1', 'Rorc'), rownames(tmp.tab), '')
 tmp.tab$symbols[tmp.tab$symbols == 'Tnip1'] <- 'Abin1'
 volplot1_non_act <- ggplot(tmp.tab, aes(log2FoldChange, log, label= symbols)) + 
         geom_point(aes(colour=legend)) + xlab('Log2 Fold Change') + ylab('-log10(p.adj)') +
-        geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Abin1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4')), pch = 21, size = 4, colour = 'red') +
+        geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Abin1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17a', 'Il17f', 'Prf1', 'Rorc')), pch = 21, size = 4, colour = 'red') +
         scale_color_manual(values=colPal) +
         annotate("rect", xmin = -Inf, xmax = -log2(1.5), ymin = ylim.a/1.06, ymax = Inf, fill = col_WT) +
         annotate("rect", xmin = log2(1.5), xmax =Inf, ymin = ylim.a/1.06, ymax = Inf, fill = col_GTKO) +
@@ -804,7 +844,7 @@ volplot1_non_act <- ggplot(tmp.tab, aes(log2FoldChange, log, label= symbols)) +
         geom_vline(xintercept = -log2(1.5), linetype="dashed", color = col_WT, size = 0.5) +
         geom_vline(xintercept = log2(1.5), linetype="dashed", color = col_GTKO, size = 0.5) +
         geom_hline(yintercept = -log10(0.05), linetype="dashed", color = "black", size = 0.5) +
-        xlim(-xlim.a, xlim.a) + ylim(0, ylim.a) + geom_text_repel(ylim = c(0, ylim.a/1.1), seed = 120, max.overlaps = 10000) + 
+        xlim(-xlim.a, xlim.a) + ylim(0, ylim.a) + geom_text_repel(ylim = c(0, ylim.a/1.1), seed = 120, max.overlaps = 1000000) + 
         ggtitle("Volcano plot of comparison between GTKO and WT mice") + 
         theme_classic() + 
         theme(
@@ -830,7 +870,7 @@ volplot1_non_act_blank <- ggplot(tmp.tab, aes(log2FoldChange, log)) +
         geom_point(aes(colour=legend), size = 2) + 
         xlab('') +
         ylab('') +
-        geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Abin1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17f', 'Tnfrsf4')), pch = 21, size = 5, colour = 'red') +
+        geom_point(data = tmp.tab %>% as.data.frame() %>% dplyr::filter(symbols %in% c('Gzmb', 'Ifng', 'Casp1', 'Tnip1', 'Casp4', 'Serpina3g', 'Serpina3f', 'Il17a', 'Il17f', 'Prf1', 'Rorc')), pch = 21, size = 5, colour = 'red') +
         scale_color_manual(values=colPal) +
         annotate("rect", xmin = -Inf, xmax = -log2(1.5), ymin = ylim.a/1.06, ymax = Inf, fill = col_WT) +
         annotate("rect", xmin = log2(1.5), xmax =Inf, ymin = ylim.a/1.06, ymax = Inf, fill = col_GTKO) +
