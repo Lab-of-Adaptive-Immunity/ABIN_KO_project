@@ -1,10 +1,10 @@
 ## About
 
-This depository contians scripts to re-do analyses and figures for Janusova et al. paper: 
+This depository contains scripts to re-do analyses and figures for Janusova et al. paper: 
 
 ABIN1 is a negative regulator of effector functions in cytotoxic T cells
 
-Link: [Here](https://pubmed.ncbi.nlm.nih.gov/38877170/)
+Link: [Here.](https://pubmed.ncbi.nlm.nih.gov/38877170/)
 
 Data Accession: [GSE245397](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?&acc=GSE245397)
 
